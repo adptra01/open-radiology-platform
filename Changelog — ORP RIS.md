@@ -18,6 +18,10 @@ All notable changes to this project will be documented in this file.
 - Perbaikan host-lokal (bukan repo): shim `sitecustomize.py` di venv uv tool (`~/.local/share/uv/tools/google-colab-cli/.../site-packages/`) berisi alias satu baris. **Wajib dipasang ulang setiap `colab update`** (reinstall menghapusnya). Terverifikasi E2E: `new` → `exec print` → output → `stop`.
 - Pelajaran path: `colab exec -f` membaca file **lokal** relatif terhadap cwd — jalankan dari root repo (`/mnt/DiskD/Projects/DCM4CHE`), bukan dari `ai-worker/notebooks/`.
 
+### Fixed — Colab session quota limit (2026-09-18)
+- `colab new` / `colab run` error: `Precondition Failed (412)` — batasan kuota Google Colab free tier. Terjadi setiap kali membuat session GPU T4 berurutan terlalu cepat tanpa jeda. Tidak menjadi bug code, melimit sisi Google Colab API.
+- Solusi practical: tutup session lama (`colab stop -s <nama>`), tunggu 30-60 detik antar pembuatan session, atau gunakan `colab run --keep` agar session tetap aktif untuk eksperimen berulang. Saat ini `tb.available=false` karena bobot belum berhasil didownload dari Colab.
+
 ### Added — deploy trial mini_pacs (2026-09-18)
 - Server `mini_pacs` (Ubuntu 22.04, 15G RAM, 43G disk, Docker 29.7): clone publik ke `~/projects/orp-ris`, `.env.prod` di-generate di server (`chmod 600`, secret tak pernah keluar), port trial 8002/3001/8042/4246/8001 (bentrok portainer/waha/mcu-gateway di 8000/3000/4242).
 - **Bug ditemukan saat deploy & diperbaiki**: (1) `db:monitor --timeout` tak ada di L13 → probe via `migrate --force` loop; (2) supervisord tanpa nginx/php-fpm + pid/run + temp root-owned → program lengkap, pid/temp di `/tmp`, upstream TCP 9000, chown log; (3) `schedule:run` one-shot → loop 60s, `queue-monitor` CLI invalid dihapus; (4) log bind-mount root-owned tanpa sudo → named volumes; (5) seed butuh faker (dev-only) → command baru `orp:create-user` + `ADMIN_PASSWORD` env; (6) `--env-file` tak masuk kontainer → `ADMIN_PASSWORD` didaftarkan eksplisit.
@@ -33,6 +37,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added — fine-tune TB via Colab CLI (headless)
 - `ai-worker/scripts/tb_finetune_run.py`: cermin 1:1 notebook (dataset HF publik Montgomery+Shenzhen, seed 42, DenseNet121→BCE, 20 epoch, split stratify, evaluasi, checkpoint format `tb.py`). Cara pakai: `colab new -s tb-train --gpu T4` → `colab install …` → `colab exec -f …` → `colab download … ai-worker/weights/` → `colab stop`. CLI 0.6.0 terpasang via `uv tool` (butuh login Google OAuth sekali — interaktif oleh user).
+- **Catatan kuota**: `colab new` / `colab run` gagal `Precondition Failed (412)` jika membuat session berurutan tanpa jeda — batasan API Google Colab free tier. Solusi: `colab stop -s <nama>` sebelum session baru, atau tunggu 30-60 detik. Jika gagal terus, gunakan `colab run --keep` atau jalankan manual di Colab Web UI (buka `https://colab.research.google.com/`).
 - OHIF **tetap v2** (diputuskan user — tidak ada kendala yang memaksa migrasi; evaluasi v3 tetap di `docs/` untuk pasca-v1).
 
 ### Changed — port host compose prod bisa di-override env
@@ -59,7 +64,10 @@ All notable changes to this project will be documented in this file.
 ### Known Issues (update)
 - `Order::nextOrderNumber()` (`ORD-YYYYMMDDHHMMSS-XXXX`, 23 char) melebihi VR SH 16 untuk `RequestedProcedureID` MWL — test memakai bentuk pendek 15 char; perlu keputusan: potong saat kirim MWL vs ganti format order_no (non-blocking, DICOM tetap terkirim dengan warning).
 - `data/` (Orthanc binaries, `tb-datasets/montgomery.zip`), `backups/`, `*.log`, `__pycache__`, `adapter/.env` **tidak masuk** commit `17162c6` (terverifikasi `git ls-files` bersih) — isu binary-churn dari history lama tertutup oleh rewrite.
-- TB: `tb_densenet121.pt` belum ada (`available=false`); OHIF masih v2 (evaluasi v3 di `docs/ohif-v3-evaluation.md`).
+- TB: `tb_densenet121.pt` belum ada (`available=false`); inference pipeline graceful, OHIF v2 tetap (evaluasi v3 di `docs/ohif-v3-evaluation.md` untuk pasca-v1).
+- **Colab CLI**: `colab new` / `colab run` gagal `Precondition Failed (412)` saat membuat session GPU berurutan terlalu cepat — batasan kuota free tier Google Colab. Shim `KernelClient` sudah dipasang (`sitecustomize.py`) tapi `colab run` butuh jeda antar session (~30 detik) atau tutup session lama sebelum buat baru. Catat di SOP: `colab stop -s <nama>` sebelum session baru.
+
+### Fixed — `ris/Dockerfile` konteks ganda + stage node tanpa PHP (2026-09-18)
 
 ### Fixed — `ris/Dockerfile` konteks ganda + stage node tanpa PHP (2026-09-18)
 - **Konteks**: `COPY composer.json` (konteks `ris/`) vs `COPY platform/…` (konteks root) — build lama gagal checksum. Kini konteks = **root** (`.dockerignore` baru: hanya `ris/` + `platform/`, sisanya + `vendor`/`node_modules`/`.env` dikecualikan).
