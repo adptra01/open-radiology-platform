@@ -22,8 +22,14 @@ All notable changes to this project will be documented in this file.
 
 ### Known Issues (update)
 - `Order::nextOrderNumber()` (`ORD-YYYYMMDDHHMMSS-XXXX`, 23 char) melebihi VR SH 16 untuk `RequestedProcedureID` MWL — test memakai bentuk pendek 15 char; perlu keputusan: potong saat kirim MWL vs ganti format order_no (non-blocking, DICOM tetap terkirim dengan warning).
-- `data/orthanc/index/*` masih tracked di git (binary churn `M index/index-wal`); `.gitignore` baru hanya menutup file baru — perlu `git rm --cached data/` sebelum commit produksi pertama.
+- `data/` (Orthanc binaries, `tb-datasets/montgomery.zip`), `backups/`, `*.log`, `__pycache__`, `adapter/.env` **tidak masuk** commit `17162c6` (terverifikasi `git ls-files` bersih) — isu binary-churn dari history lama tertutup oleh rewrite.
 - TB: `tb_densenet121.pt` belum ada (`available=false`); OHIF masih v2 (evaluasi v3 di `docs/ohif-v3-evaluation.md`).
+
+### Security — rotasi `ORP_RIS_API_KEY` pasca-push (2026-09-18)
+- Push pertama **ditolak GitHub**: `data/tb-datasets/montgomery.zip` (310MB) + `adapter/.env` (bawa API key asli) ikut di 2 commit lokal. Perbaikan **tanpa force-push**: `git reset origin/main` (history lokal saja, remote belum punya) → `.gitignore` diperketat → 1 commit bersih `17162c6` (344 file) → push **sukses** `2534fb5c..17162c65`.
+- Objek lama berisi secret di-purge lokal (`reflog expire + gc`); key tidak pernah sampai ke remote.
+- Key dirotasi (`openssl rand -hex 32`) di `ris/.env` + `adapter/.env` (hanya 2 file yang memegangnya).
+- Verifikasi E2E dengan key baru: C-ECHO 0, MWL status 0, `GET /api/dicom/worklists` key-baru → **200**, key-salah → **401**.
 
 ## [Unreleased] — 2026-09-17 (Pengerasan produksi: Orthanc auth + kredensial klien)
 
