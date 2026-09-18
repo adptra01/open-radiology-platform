@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+### Added — Dockerfile adapter & ai-worker (2026-09-18)
+- Repo sebelumnya **tidak punya** Dockerfile untuk keduanya (compose `build: context: ./adapter` selalu gagal `Dockerfile: no such file` — terbukti saat deploy mini_pacs). Kini: `adapter/Dockerfile` (python:3.13-slim, uv sync, non-root `app`, EXPOSE 4243-4245) + `ai-worker/Dockerfile` (python:3.12-slim sesuai `requires-python`, torch CPU via uv index, non-root, EXPOSE 8000) + `wget` untuk healthcheck compose.
+- **Konteks diseragamkan ke root** (`context: .` + `dockerfile:`) di compose dev + prod; `.dockerignore` diperbaiki (sebelumnya mengecualikan `adapter/`+`ai-worker/` sehingga COPY gagal; kini hanya data/secrets/artifacts + `weights/*.pt`).
+- **Bukti lokal**: build adapter 7s + ai-worker 122s sukses; smoke adapter online (MWL/MPPS/STORE) dan ai-worker `/health` ok 18 patologi + `tb.available=false` (ekspektasi tanpa bobot).
+
 ## [Unreleased] — 2026-09-18 (ORD 15-char + Colab CLI + port prod override)
 
 ### Changed — Order Number dipendekkan (opsi a, diputuskan user)

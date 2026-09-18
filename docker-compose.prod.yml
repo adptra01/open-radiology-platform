@@ -170,7 +170,8 @@ services:
   # ----------------------------------------------------------
   ai-worker:
     build:
-      context: ./ai-worker
+      context: .
+      dockerfile: ai-worker/Dockerfile
     container_name: orp-ai-worker
     restart: unless-stopped
     ports:
@@ -198,7 +199,8 @@ services:
   # ----------------------------------------------------------
   adapter:
     build:
-      context: ./adapter
+      context: .
+      dockerfile: adapter/Dockerfile
     container_name: orp-adapter
     restart: unless-stopped
     ports:

@@ -1,11 +1,10 @@
 # ORP RIS — Docker build context (root).
-# Image ris (ris/Dockerfile) hanya butuh ris/ + platform/;
-# sisanya (adapter, ai-worker, data, docs, backups) tidak ikut konteks.
+# Konteks dipakai 3 image: ris (butuh ris/ + platform/),
+# adapter (butuh adapter/), ai-worker (butuh ai-worker/).
+# Data besar, secrets, dan artifacts dev selalu dikecualikan.
 .git/
 .opencode/
 .agents/
-adapter/
-ai-worker/
 data/
 docs/
 backups/
@@ -17,6 +16,8 @@ docker-compose.prod.yml
 .env.example
 .env.prod.example
 .gitignore
+ai-worker/weights/*.pt
+ai-worker/weights/*.bin
 ris/vendor/
 ris/node_modules/
 ris/public/build
