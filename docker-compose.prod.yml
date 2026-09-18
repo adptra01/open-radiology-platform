@@ -68,9 +68,12 @@ services:
       ORP_RIS_API_KEY: ${ORP_RIS_API_KEY}
 
     volumes:
-      # Log nginx/supervisor/php-fpm
-      - ./logs/ris:/var/log/supervisor
-      - ./logs/nginx:/var/log/nginx
+      # Named volumes (bukan bind-mount): dir log di image sudah chown www-data;
+      # bind-mount ./logs dibuat root oleh docker sehingga www-data tak bisa tulis
+      # dan mini_pacs tanpa sudo tak bisa chown. Baca log via
+      # `docker exec orp-ris tail -f /var/log/supervisor/…`.
+      - ris-logs:/var/log/supervisor
+      - nginx-logs:/var/log/nginx
     depends_on:
       postgres:
         condition: service_healthy
@@ -222,6 +225,8 @@ services:
 
 volumes:
   pgdata:
+  ris-logs:
+  nginx-logs:
 
 networks:
   orp-network:
