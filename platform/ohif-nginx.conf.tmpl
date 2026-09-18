@@ -1,0 +1,47 @@
+# ORP RIS — nginx untuk container OHIF (image `ohif/viewer`, berbasis nginx)
+#
+# Mengapa ada file ini:
+#   Orthanc TIDAK memiliki dukungan CORS bawaan (lihat Orthanc Book, FAQ
+#   "Same-origin policy"): setiap section `Cors` di orthanc.json akan
+#   diabaikan diam-diam, sehingga viewer di :3000 tidak bisa memanggil
+#   DICOMweb di :8042 (beda origin → diblokir browser).
+#
+# Solusi resmi (dan yang dipakai di sini): proxy REST/DICOMweb Orthanc ke
+# origin yang SAMA dengan viewer (`/pacs/`), jadi browser tidak pernah
+# melakukan cross-origin request dan tidak perlu header CORS sama sekali —
+# ini juga aman untuk data PHI (bukan `Access-Control-Allow-Origin: *`).
+
+server {
+  listen 80;
+  server_name _;
+
+  root /usr/share/nginx/html;
+  index index.html index.htm;
+
+  # Studi CXR bisa beberapa MB; STOW-RS melewati proxy ini.
+  client_max_body_size 100m;
+
+  # DICOMweb (QIDO-RS / WADO-RS / STOW-RS) + REST Orthanc, same-origin.
+  #
+  # Orthanc ber-`AuthenticationEnabled: true` (platform/orthanc.json.tmpl), jadi
+  # setiap request ke /pacs/ diberi header Basic auth hasil render
+  # platform/ohif-entrypoint.sh. Browser tidak pernah menerima kredensial ini.
+  location /pacs/ {
+    proxy_http_version 1.1;
+    proxy_set_header Authorization "Basic __ORP_ORTHANC_AUTH_B64__";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_pass http://orthanc:8042/;
+  }
+
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+
+  error_page 500 502 503 504 /50x.html;
+  location = /50x.html {
+    root /usr/share/nginx/html;
+  }
+}

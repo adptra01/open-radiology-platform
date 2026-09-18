@@ -1,0 +1,90 @@
+{
+  "Name": "ORP RIS Orthanc",
+  "StorageDirectory": "/var/lib/orthanc/db",
+  "IndexDirectory": "/var/lib/orthanc/db/index",
+  "TemporaryDirectory": "/var/lib/orthanc/db/tmp",
+  "LogDirectory": "/var/lib/orthanc/db/logs",
+
+  // WAJIB: tanpa ini Orthanc menolak semua request dari luar loopback dengan
+  // 401 (pesan log: "remote access is not allowed") — termasuk dari host
+  // (curl/browser) dan dari container OHIF.
+  "RemoteAccessAllowed": true,
+
+  // Image jodogne/orthanc-plugins menyimpan plugin di folder ini; tanpa
+  // bagian ini plugin (OHIF, WebViewer, Gdcm, …) tidak dimuat.
+  "Plugins": ["/usr/local/share/orthanc/plugins/"],
+
+  "DicomAet": "ORTHANC",
+  "DicomPort": 4242,
+
+  // Auth HTTP AKTIF (dev maupun produksi). Password TIDAK ditulis di file ini:
+  // platform/orthanc-entrypoint.sh menyulih placeholder __ORP_ORTHANC_PASSWORD__
+  // dari env ORP_ORTHANC_PASSWORD (docker-compose/.env) saat container start.
+  //
+  // Akses browser tidak perlu kredensial karena proxy same-origin di container
+  // OHIF menyuntikkan header Authorization ke Orthanc
+  // (platform/ohif-nginx.conf.template + platform/ohif-entrypoint.sh); klien
+  // server-side (PacsClient) memakai kolom username/password di tabel
+  // pacs_sources. Catatan: ini hanya mengatur HTTP/REST — asosiasi DICOM
+  // (C-STORE/C-FIND) diatur oleh DicomAlwaysAllowStore/dll.
+  "AuthenticationEnabled": true,
+  "RegisteredUsers": {
+    "__ORP_ORTHANC_USERNAME__": "__ORP_ORTHANC_PASSWORD__"
+  },
+
+  "DicomModalities": {
+    "orp-adapter": {
+      "AET": "ORPRIS",
+      "Host": "adapter",
+      "Port": 4245
+    }
+  },
+
+  "DicomModalitiesInDatabase": false,
+  "DicomAlwaysAllowStore": false,
+  "DicomAlwaysAllowFind": true,
+  "DicomAlwaysAllowMove": true,
+  "DicomCheckModalityHost": false,
+
+  "DicomWeb": {
+    "Enable": true,
+    "Root": "/dicom-web/",
+    "EnableWado": true,
+    "EnableQido": true,
+    "EnableStow": true,
+    "StowMaxSize": 0,
+    "QidoCaseSensitive": true,
+    "Ssl": false
+  },
+
+  "HttpPort": 8042,
+  "HttpThreadsCount": 8,
+  "HttpsPort": 0,
+
+  // TIDAK ADA section CORS: Orthanc sengaja tidak mendukung CORS (lihat Orthanc
+  // Book — FAQ "Same-origin policy"); section `Cors` akan diabaikan diam-diam.
+  // Akses browser diselesaikan lewat proxy same-origin di container OHIF
+  // (platform/ohif-nginx.conf → /pacs/ → orthanc:8042).
+
+  "OrthancPeers": {},
+
+  "PostgreSQL": {
+    "Enable": false
+  },
+
+  "StoreDicom": true,
+  "KeepAlive": true,
+  "SyncStudyFrom": [],
+
+  "StableAge": 60,
+  "MaximumPatientCount": 0,
+  "MaximumStorageSize": 0,
+
+  "SynchronousFind": true,
+  "SynchronousMove": true,
+  "SynchronousStore": true,
+  "JobsHistorySize": 10,
+
+  "UnknownSopClassWorker": true,
+  "DicomServerEnabled": true
+}

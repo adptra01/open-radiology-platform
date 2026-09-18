@@ -1,0 +1,34 @@
+# ORP RIS — root ignore (secrets, data, build artifacts)
+# Secrets — never commit
+.env
+.env.prod
+.env.local
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.json
+service-account.json
+token.json
+
+# Data & volumes (binary / PHI)
+data/
+logs/
+*.sqlite
+*.db
+*.log
+
+# AI weights (besar + hasil training lokal/Colab)
+ai-worker/weights/*.pt
+ai-worker/weights/*.bin
+!ai-worker/weights/README.md
+!ai-worker/weights/.gitkeep
+
+# Python / Node artifacts
+__pycache__/
+.venv/
+node_modules/
+public/build/
+
+# DCM4CHE backups lokal (bisa berisi dump DB + duplikat docs) — tidak di-commit
+backups/

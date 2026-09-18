@@ -1,0 +1,144 @@
+# ORP RIS — Docker Compose (produksi/dev PACS stack)
+#
+# Referensi vendor stack MVP (M5):
+#   - orthanc      : PACS + DICOMweb (QIDO/WADO/STOW) — config: platform/orthanc.json
+#   - ohif         : zero-footprint viewer — config: platform/ohif-config.js
+#   - ai-worker    : FastAPI inferensi CXR (CPU) — isi ORP_AI_* sesuai kebutuhan
+#   - postgres     : DB produksi (ris/ menggunakan ddev di dev; untuk produksi
+#                    arahkan .env ris ke service ini)
+#
+# Catatan: service ris (Laravel) TIDAK di sini — ia hidup di ddev selama
+# pengembangan. Untuk produksi buat image ris sendiri lalu tambahkan service.
+#
+# Jalankan:
+#   docker compose up -d
+#
+# Data Orthanc disimpan di ./data/orthanc (sudah disiapkan kosong di repo).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: orp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orp_ris
+      POSTGRES_USER: orp
+      POSTGRES_PASSWORD: ${ORP_DB_PASSWORD:-orp-secret-dev}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orp -d orp_ris"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  orthanc:
+    image: jodogne/orthanc-plugins:latest
+    container_name: orp-orthanc
+    restart: unless-stopped
+    ports:
+      - "8042:8042"     # REST + DICOMweb
+      - "4242:4242"     # DICOM (C-STORE SCP / C-FIND SCP)
+    environment:
+      # Kredensial HTTP Orthanc (AuthenticationEnabled: true). Template
+      # platform/orthanc.json.tmpl tidak memuat password; entrypoint menyulih
+      # placeholder dari env ini saat container start.
+      ORP_ORTHANC_USERNAME: ${ORP_ORTHANC_USERNAME:-orp}
+      ORP_ORTHANC_PASSWORD: ${ORP_ORTHANC_PASSWORD:-orp-orthanc-dev}
+    volumes:
+      # Config ditaruh di direktori sendiri + entrypoint di bawah: image ini juga
+      # memuat /etc/orthanc/advanced.json, sehingga menimpa /etc/orthanc/orthanc.json
+      # saja memicu "section defined in 2 different configuration files" (Orthanc
+      # menolak start). Jadi Orthanc diarahkan hanya ke direktori config kita.
+      - ./platform/orthanc.json.tmpl:/etc/orthanc-orp/orthanc.json.tmpl:ro
+      - ./platform/orthanc-entrypoint.sh:/usr/local/bin/orp-orthanc-entrypoint.sh:ro
+      - ./data/orthanc:/var/lib/orthanc/db
+    # Entrypoint: render konfigurasi (password dari env) lalu jalankan Orthanc
+    # dengan direktori config hasil render.
+    entrypoint: ["/bin/sh", "/usr/local/bin/orp-orthanc-entrypoint.sh"]
+    depends_on:
+      - postgres
+    healthcheck:
+      # Endpoint /system (bukan /orthanc/system) pada Orthanc mainline; kini
+      # butuh kredensial karena AuthenticationEnabled: true.
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- --user=$${ORP_ORTHANC_USERNAME} --password=$${ORP_ORTHANC_PASSWORD} http://localhost:8042/system || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  ohif:
+    image: ohif/viewer:latest
+    container_name: orp-ohif
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      # Dipakai platform/ohif-entrypoint.sh untuk menyuntikkan Basic auth
+      # Orthanc ke proxy /pacs/ (browser tidak pernah memegang kredensial).
+      ORP_ORTHANC_USERNAME: ${ORP_ORTHANC_USERNAME:-orp}
+      ORP_ORTHANC_PASSWORD: ${ORP_ORTHANC_PASSWORD:-orp-orthanc-dev}
+    volumes:
+      - ./platform/ohif-config.js:/usr/share/nginx/html/app-config.js:ro
+      # Proxy /pacs/ → orthanc:8042 agar DICOMweb same-origin (Orthanc tidak
+      # mendukung CORS) + header Basic auth (Orthanc ber-auth).
+      - ./platform/ohif-nginx.conf.tmpl:/opt/orp/ohif-nginx.conf.tmpl:ro
+      - ./platform/ohif-entrypoint.sh:/opt/orp/ohif-entrypoint.sh:ro
+    # Image ini TIDAK memakai /docker-entrypoint.sh resmi nginx (punya
+    # /usr/src/entrypoint.sh sendiri, yang juga tidak menjalankan
+    # /docker-entrypoint.d/), jadi config nginx di-render lewat pembungkus ini
+    # sebelum entrypoint bawaan dijalankan.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        /opt/orp/ohif-entrypoint.sh
+        exec /usr/src/entrypoint.sh "$@"
+      - sh
+    # Compose mengosongkan CMD image begitu `entrypoint` di-set, jadi perintah
+    # nginx harus dinyatakan eksplisit di sini.
+    command: ["nginx", "-g", "daemon off;"]
+    depends_on:
+      - orthanc
+
+  ai-worker:
+    build:
+      context: ./ai-worker
+    container_name: orp-ai-worker
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      ORP_AI_DEVICE: cpu
+      ORP_AI_MODEL: densenet121-res224-all
+      ORP_AI_THRESHOLD: "0.15"
+      ORP_AI_TOP_K: "5"
+      ORP_AI_MAX_UPLOAD_MB: "25"
+      # ORP_AI_TB_WEIGHTS: /weights/tb_densenet121.pt   # setelah fine-tune TB
+    volumes:
+      - ./ai-worker/weights:/weights:ro
+
+  adapter:
+    build:
+      context: ./adapter
+    container_name: orp-adapter
+    restart: unless-stopped
+    ports:
+      - "4243:4243"     # MWL SCP
+      - "4244:4244"     # MPPS SCP
+      - "4245:4245"     # C-STORE SCP
+    environment:
+      ORP_AE_TITLE: ORPRIS
+      ORP_MWL_PORT: "4243"
+      ORP_MPPS_PORT: "4244"
+      ORP_STORE_PORT: "4245"
+      ORP_RIS_API_URL: ${ORP_RIS_API_URL:-http://ris:80/api}
+      ORP_RIS_API_KEY: ${ORP_RIS_API_KEY:-change-me}
+    depends_on:
+      - orthanc
+
+volumes:
+  pgdata:
