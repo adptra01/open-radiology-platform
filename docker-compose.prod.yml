@@ -67,6 +67,9 @@ services:
       # Sanctum / API key adapter
       ORP_RIS_API_KEY: ${ORP_RIS_API_KEY}
 
+      # Password bootstrap login trial (dipakai orp:create-user; kosong = wajib --password)
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+
     volumes:
       # Named volumes (bukan bind-mount): dir log di image sudah chown www-data;
       # bind-mount ./logs dibuat root oleh docker sehingga www-data tak bisa tulis
