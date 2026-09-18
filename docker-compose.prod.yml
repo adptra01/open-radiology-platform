@@ -5,7 +5,8 @@
 #
 # Prasyarat:
 #   - .env.prod dengan secret produksi (APP_KEY, DB_PASSWORD, ORTHANC_PASSWORD, dll)
-#   - Image RIS sudah di-build: docker build -t orp-ris:latest -f ris/Dockerfile ris/
+#   - Image RIS di-build dari ROOT proyek: docker build -t orp-ris:latest -f ris/Dockerfile .
+#     (atau: docker compose -f docker-compose.prod.yml build ris)
 #   - Volume data/orthanc, data/postgres sudah ada atau akan dibuat
 #
 # Jaringan internal: orp-network (semua service saling resolve by name)
@@ -17,6 +18,9 @@ services:
   # ----------------------------------------------------------
   ris:
     image: orp-ris:latest
+    build:
+      context: .
+      dockerfile: ris/Dockerfile
     container_name: orp-ris
     restart: unless-stopped
     ports:

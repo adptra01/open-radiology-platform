@@ -25,6 +25,12 @@ All notable changes to this project will be documented in this file.
 - `data/` (Orthanc binaries, `tb-datasets/montgomery.zip`), `backups/`, `*.log`, `__pycache__`, `adapter/.env` **tidak masuk** commit `17162c6` (terverifikasi `git ls-files` bersih) — isu binary-churn dari history lama tertutup oleh rewrite.
 - TB: `tb_densenet121.pt` belum ada (`available=false`); OHIF masih v2 (evaluasi v3 di `docs/ohif-v3-evaluation.md`).
 
+### Fixed — `ris/Dockerfile` konteks ganda + stage node tanpa PHP (2026-09-18)
+- **Konteks**: `COPY composer.json` (konteks `ris/`) vs `COPY platform/…` (konteks root) — build lama gagal checksum. Kini konteks = **root** (`.dockerignore` baru: hanya `ris/` + `platform/`, sisanya + `vendor`/`node_modules`/`.env` dikecualikan).
+- **Stage node murni gagal**: `npm run build` memanggil `php artisan wayfinder:generate` (`php: not found`) — builder digabung (`php-base` + apk `nodejs` 24) dengan `composer install --no-scripts` lalu `package:discover` setelah COPY penuh.
+- **Basi**: `tailwind.config.js`/`postcss.config.js` tidak ada di repo (Tailwind v4) — baris COPY dihapus; `storage/logs`+`bootstrap/cache` dibuat di builder.
+- **Bukti**: `docker build -t orp-ris:latest -f ris/Dockerfile .` **sukses 70s**; smoke: Laravel 13.32.0, `public/build/manifest.json` ada, `.env` tidak terbakar, `api/health` terdaftar; `docker-compose.prod.yml` (+blok `build:`) `config -q` valid.
+
 ### Security — rotasi `ORP_RIS_API_KEY` pasca-push (2026-09-18)
 - Push pertama **ditolak GitHub**: `data/tb-datasets/montgomery.zip` (310MB) + `adapter/.env` (bawa API key asli) ikut di 2 commit lokal. Perbaikan **tanpa force-push**: `git reset origin/main` (history lokal saja, remote belum punya) → `.gitignore` diperketat → 1 commit bersih `17162c6` (344 file) → push **sukses** `2534fb5c..17162c65`.
 - Objek lama berisi secret di-purge lokal (`reflog expire + gc`); key tidak pernah sampai ke remote.
