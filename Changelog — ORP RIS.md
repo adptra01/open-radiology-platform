@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+### Fixed — image ris tidak serve HTTP + supervisord permission (2026-09-18, temuan deploy mini_pacs)
+- **nginx + php-fpm tidak pernah jalan**: `supervisord.conf` hanya berisi queue/scheduler/monitor. Ditambah `[program:nginx]` + `[program:php-fpm]`; upstream nginx → `127.0.0.1:9000` (default pool www.conf; hindari unix socket yang butuh root).
+- **Permission**: supervisord pidfile `/var/run/…` → `/tmp/`; nginx pid → `/tmp/nginx.pid`; temp dirs (`client_body`, `proxy`, `fastcgi`, …) → `/tmp/*` (prefix Alpine `/var/lib/nginx` milik root); Dockerfile `chown www-data` untuk `/var/log/supervisor` + `/var/log/nginx`.
+- **Bukti lokal**: `nginx` + `php-fpm` RUNNING di supervisord, `GET :18002/api/health` merespons JSON (503 ekspektasi dgn sqlite `:memory:` tanpa tabel jobs — artifact test; di pgsql prod tabel ada via migrasi entrypoint).
+- Catatan deploy: bind-mount `./logs/*` dibuat root oleh docker → sekali `chown -R 82:82 logs/` (uid www-data Alpine) di server.
+
 ### Added — Dockerfile adapter & ai-worker (2026-09-18)
 - Repo sebelumnya **tidak punya** Dockerfile untuk keduanya (compose `build: context: ./adapter` selalu gagal `Dockerfile: no such file` — terbukti saat deploy mini_pacs). Kini: `adapter/Dockerfile` (python:3.13-slim, uv sync, non-root `app`, EXPOSE 4243-4245) + `ai-worker/Dockerfile` (python:3.12-slim sesuai `requires-python`, torch CPU via uv index, non-root, EXPOSE 8000) + `wget` untuk healthcheck compose.
 - **Konteks diseragamkan ke root** (`context: .` + `dockerfile:`) di compose dev + prod; `.dockerignore` diperbaiki (sebelumnya mengecualikan `adapter/`+`ai-worker/` sehingga COPY gagal; kini hanya data/secrets/artifacts + `weights/*.pt`).

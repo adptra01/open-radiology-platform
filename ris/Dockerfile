@@ -99,9 +99,9 @@ COPY platform/supervisord.conf /etc/supervisor/conf.d/orp-ris.conf
 COPY platform/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Create required dirs
-RUN mkdir -p /var/log/supervisor /var/www/html/storage/app/public /var/www/html/storage/framework/cache /var/www/html/storage/framework/sessions /var/www/html/storage/framework/views /var/www/html/storage/logs /var/www/html/bootstrap/cache \
-    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+# Create required dirs (+ chown log agar supervisord sebagai www-data bisa tulis)
+RUN mkdir -p /var/log/supervisor /var/log/nginx /var/www/html/storage/app/public /var/www/html/storage/framework/cache /var/www/html/storage/framework/sessions /var/www/html/storage/framework/views /var/www/html/storage/logs /var/www/html/bootstrap/cache \
+    && chown -R www-data:www-data /var/log/supervisor /var/log/nginx /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Non-root user for nginx master (worker runs as www-data via config)
 USER www-data
