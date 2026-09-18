@@ -12,16 +12,15 @@ if [ -z "${APP_KEY:-}" ]; then
     php artisan key:generate --force --no-interaction
 fi
 
-# 2. Tunggu DB siap (PostgreSQL) — retry loop
-echo "ORP: menunggu database..."
-until php artisan db:monitor --timeout=30 2>/dev/null; do
+# 2-3. Tunggu DB siap + migrasi (force untuk produksi).
+# `migrate --force` dipakai sebagai readiness probe sekaligus: gagal bila DB
+# down (retry), sukses + idempotent bila sudah migrasi. (Dulu: `db:monitor
+# --timeout=30` — opsi --timeout tidak ada di Laravel 13 → loop selamanya.)
+echo "ORP: menunggu database + menjalankan migrasi..."
+until php artisan migrate --force --no-interaction; do
     echo "  DB belum siap, retry 3s..."
     sleep 3
 done
-
-# 3. Migrasi (force untuk produksi — hati-hati!)
-echo "ORP: menjalankan migrasi..."
-php artisan migrate --force --no-interaction
 
 # 4. Cache config, route, view (optimasi produksi)
 echo "ORP: cache konfigurasi..."
