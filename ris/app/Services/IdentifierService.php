@@ -49,9 +49,18 @@ class IdentifierService
         return $acc;
     }
 
+    /**
+     * Order Number — juga dikirim sebagai RequestedProcedureID MWL (VR SH,
+     * maks 16 karakter, lihat catatan kelas).
+     * Format: ORD-YYMMDD-XXXX (15 karakter, 10.000/hari, retry bila tabrakan).
+     */
     public function nextOrderNumber(): string
     {
-        return 'ORD-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(4));
+        do {
+            $no = 'ORD-' . now()->format('ymd') . '-' . Str::padLeft((string) random_int(0, 9999), 4, '0');
+        } while (Order::withTrashed()->where('order_number', $no)->exists());
+
+        return $no;
     }
 
     public function nextReportNumber(): string

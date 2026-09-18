@@ -63,7 +63,13 @@ class RadiologyDomainTest extends TestCase
             strlen($order->accession_number),
             'Accession Number melebihi batas VR SH (16 karakter)'
         );
-        $this->assertMatchesRegularExpression('/^ORD-\d{14}-[A-Z0-9]{4}$/', $order->order_number);
+        $this->assertMatchesRegularExpression('/^ORD-\d{6}-\d{4}$/', $order->order_number);
+        // Regresi: RequestedProcedureID MWL ber-VR DICOM SH → maks 16 karakter.
+        $this->assertLessThanOrEqual(
+            IdentifierService::ACCESSION_MAX_LENGTH,
+            strlen($order->order_number),
+            'Order Number melebihi batas VR SH (16 karakter)'
+        );
         $this->assertTrue($order->status === OrderStatus::Requested);
         $this->assertTrue($order->priority === OrderPriority::Routine);
         $this->assertNotNull($order->requested_at);

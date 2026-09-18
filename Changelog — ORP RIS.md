@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] — 2026-09-18 (ORD 15-char + Colab CLI + port prod override)
+
+### Changed — Order Number dipendekkan (opsi a, diputuskan user)
+- `IdentifierService::nextOrderNumber()`: `ORD-YYYYMMDDHHMMSS-XXXX` (23 char) → `ORD-YYMMDD-XXXX` (**15 char**, 10.000/hari + retry tabrakan) — kini aman untuk `RequestedProcedureID` MWL (VR SH ≤16). Isu ORD-vs-SH **tertutup**.
+- `RadiologyDomainTest`: regex + assert regresi SH untuk order_number. Suite: RadiologyDomain 7/26, DicomApi 17/76, Workflow 10/64, MasterData 13/69 — hijau.
+- Catatan: baris dev lama berformat 23-char tetap valid di DB (kolom string, tanpa constraint panjang); RPT tidak diubah (tidak lewat wire DICOM).
+
+### Added — fine-tune TB via Colab CLI (headless)
+- `ai-worker/scripts/tb_finetune_run.py`: cermin 1:1 notebook (dataset HF publik Montgomery+Shenzhen, seed 42, DenseNet121→BCE, 20 epoch, split stratify, evaluasi, checkpoint format `tb.py`). Cara pakai: `colab new -s tb-train --gpu T4` → `colab install …` → `colab exec -f …` → `colab download … ai-worker/weights/` → `colab stop`. CLI 0.6.0 terpasang via `uv tool` (butuh login Google OAuth sekali — interaktif oleh user).
+- OHIF **tetap v2** (diputuskan user — tidak ada kendala yang memaksa migrasi; evaluasi v3 tetap di `docs/` untuk pasca-v1).
+
+### Changed — port host compose prod bisa di-override env
+- `docker-compose.prod.yml`: `ORP_RIS_PORT/ORP_OHIF_PORT/ORP_ORTHANC_PORT/ORP_DICOM_PORT/ORP_AI_PORT` (default = standar). Alasan: trial mini_pacs (8000→portainer, 3000→waha, 4242→mcu-dicom-gateway). Terverifikasi `config` dengan port trial 8002/3001/8042/4246/8001.
+
 ## [Unreleased] — 2026-09-18 (M9 stabilisasi: fork session AqQkIio1 → DCM4CHE)
 
 ### Added — root `.gitignore` + backup pre-M9

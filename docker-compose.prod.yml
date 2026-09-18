@@ -24,7 +24,7 @@ services:
     container_name: orp-ris
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${ORP_RIS_PORT:-8000}:8000"
     environment:
       # Laravel
       APP_ENV: production
@@ -116,8 +116,8 @@ services:
     container_name: orp-orthanc
     restart: unless-stopped
     ports:
-      - "8042:8042"   # REST + DICOMweb
-      - "4242:4242"   # DICOM (C-STORE SCP / C-FIND SCP)
+      - "${ORP_ORTHANC_PORT:-8042}:8042"   # REST + DICOMweb
+      - "${ORP_DICOM_PORT:-4242}:4242"     # DICOM (C-STORE SCP / C-FIND SCP)
     environment:
       ORP_ORTHANC_USERNAME: ${ORP_ORTHANC_USERNAME}
       ORP_ORTHANC_PASSWORD: ${ORP_ORTHANC_PASSWORD}
@@ -144,7 +144,7 @@ services:
     container_name: orp-ohif
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "${ORP_OHIF_PORT:-3000}:80"
     environment:
       ORP_ORTHANC_USERNAME: ${ORP_ORTHANC_USERNAME}
       ORP_ORTHANC_PASSWORD: ${ORP_ORTHANC_PASSWORD}
@@ -174,7 +174,7 @@ services:
     container_name: orp-ai-worker
     restart: unless-stopped
     ports:
-      - "8001:8000"
+      - "${ORP_AI_PORT:-8001}:8000"
     environment:
       ORP_AI_DEVICE: ${ORP_AI_DEVICE:-cpu}
       ORP_AI_MODEL: ${ORP_AI_MODEL:-densenet121-res224-all}
