@@ -13,6 +13,12 @@ All notable changes to this project will be documented in this file.
 - **Konteks diseragamkan ke root** (`context: .` + `dockerfile:`) di compose dev + prod; `.dockerignore` diperbaiki (sebelumnya mengecualikan `adapter/`+`ai-worker/` sehingga COPY gagal; kini hanya data/secrets/artifacts + `weights/*.pt`).
 - **Bukti lokal**: build adapter 7s + ai-worker 122s sukses; smoke adapter online (MWL/MPPS/STORE) dan ai-worker `/health` ok 18 patologi + `tb.available=false` (ekspektasi tanpa bobot).
 
+### Added — deploy trial mini_pacs (2026-09-18)
+- Server `mini_pacs` (Ubuntu 22.04, 15G RAM, 43G disk, Docker 29.7): clone publik ke `~/projects/orp-ris`, `.env.prod` di-generate di server (`chmod 600`, secret tak pernah keluar), port trial 8002/3001/8042/4246/8001 (bentrok portainer/waha/mcu-gateway di 8000/3000/4242).
+- **Bug ditemukan saat deploy & diperbaiki**: (1) `db:monitor --timeout` tak ada di L13 → probe via `migrate --force` loop; (2) supervisord tanpa nginx/php-fpm + pid/run + temp root-owned → program lengkap, pid/temp di `/tmp`, upstream TCP 9000, chown log; (3) `schedule:run` one-shot → loop 60s, `queue-monitor` CLI invalid dihapus; (4) log bind-mount root-owned tanpa sudo → named volumes; (5) seed butuh faker (dev-only) → command baru `orp:create-user` + `ADMIN_PASSWORD` env; (6) `--env-file` tak masuk kontainer → `ADMIN_PASSWORD` didaftarkan eksplisit.
+- **Bukti trial**: `ris:8002` login 200 + `/api/health` healthy (db ok, queue 0, ai ok `tb_available:false`, orthanc ok); orthanc anon 401/auth 200; ohif 200; ai `/health` 18 patologi; adapter healthy; 34 permissions + 3 user + 3 pasien/order demo. Kredensial demo: `admin@testing.com`/`radio@`/`dr@` + password di `ADMIN_PASSWORD` server (minta ke admin server).
+- OHIF **tetap v2** (keputusan user).
+
 ## [Unreleased] — 2026-09-18 (ORD 15-char + Colab CLI + port prod override)
 
 ### Changed — Order Number dipendekkan (opsi a, diputuskan user)
