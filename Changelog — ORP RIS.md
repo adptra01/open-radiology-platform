@@ -13,6 +13,11 @@ All notable changes to this project will be documented in this file.
 - **Konteks diseragamkan ke root** (`context: .` + `dockerfile:`) di compose dev + prod; `.dockerignore` diperbaiki (sebelumnya mengecualikan `adapter/`+`ai-worker/` sehingga COPY gagal; kini hanya data/secrets/artifacts + `weights/*.pt`).
 - **Bukti lokal**: build adapter 7s + ai-worker 122s sukses; smoke adapter online (MWL/MPPS/STORE) dan ai-worker `/health` ok 18 patologi + `tb.available=false` (ekspektasi tanpa bobot).
 
+### Fixed — Colab CLI 0.6.0 `KernelClient` AttributeError (2026-09-18)
+- Akar: `google-colab-cli` 0.6.0 memanggil `jupyter_kernel_client.KernelClient`, tapi dependensi git-nya me-rename kelas menjadi `JupyterKernelClient` (permukaan API sama: ctor kwargs + `.start()/.execute()/.id/_own_kernel`). Semua perintah eksekusi (`install`, `exec`) gagal; `new`/`stop` tidak terpengaruh.
+- Perbaikan host-lokal (bukan repo): shim `sitecustomize.py` di venv uv tool (`~/.local/share/uv/tools/google-colab-cli/.../site-packages/`) berisi alias satu baris. **Wajib dipasang ulang setiap `colab update`** (reinstall menghapusnya). Terverifikasi E2E: `new` → `exec print` → output → `stop`.
+- Pelajaran path: `colab exec -f` membaca file **lokal** relatif terhadap cwd — jalankan dari root repo (`/mnt/DiskD/Projects/DCM4CHE`), bukan dari `ai-worker/notebooks/`.
+
 ### Added — deploy trial mini_pacs (2026-09-18)
 - Server `mini_pacs` (Ubuntu 22.04, 15G RAM, 43G disk, Docker 29.7): clone publik ke `~/projects/orp-ris`, `.env.prod` di-generate di server (`chmod 600`, secret tak pernah keluar), port trial 8002/3001/8042/4246/8001 (bentrok portainer/waha/mcu-gateway di 8000/3000/4242).
 - **Bug ditemukan saat deploy & diperbaiki**: (1) `db:monitor --timeout` tak ada di L13 → probe via `migrate --force` loop; (2) supervisord tanpa nginx/php-fpm + pid/run + temp root-owned → program lengkap, pid/temp di `/tmp`, upstream TCP 9000, chown log; (3) `schedule:run` one-shot → loop 60s, `queue-monitor` CLI invalid dihapus; (4) log bind-mount root-owned tanpa sudo → named volumes; (5) seed butuh faker (dev-only) → command baru `orp:create-user` + `ADMIN_PASSWORD` env; (6) `--env-file` tak masuk kontainer → `ADMIN_PASSWORD` didaftarkan eksplisit.
