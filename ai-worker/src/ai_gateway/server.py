@@ -1,7 +1,8 @@
 """AI Gateway FastAPI application — mounts api/ routers.
 
 Cutover: point uvicorn/Docker CMD at ``ai_gateway.server:app``.
-The legacy ``orp_ai.server:app`` stays untouched until then.
+The legacy ``orp_ai.server`` module was removed (M11); ``orp-ai serve``
+always serves this app. The legacy xrv ``POST /infer`` lives here now.
 """
 
 from __future__ import annotations

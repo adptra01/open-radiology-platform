@@ -60,7 +60,7 @@ def load_model(model_name: str, settings: Settings | None = None) -> nn.Module:
 
 def clear_cache() -> None:
     """Drop loaded models (useful before shutdown / tests)."""
-    from .tb import clear_cache as _clear_tb_cache
+    from ai_gateway.tasks.tb.model import clear_cache as _clear_tb_cache
 
     with _LOCK:
         _LOADED.clear()

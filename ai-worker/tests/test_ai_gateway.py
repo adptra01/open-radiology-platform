@@ -151,6 +151,22 @@ def test_run_task_invalid_ct_fails_with_code(tmp_path):
     assert "Modality" not in out["error"]["message"]
 
 
+def test_validation_runs_before_weights_check(tmp_path):
+    """INVALID input reports the input reason even when weights are missing.
+
+    Validation precedes model loading: a CT reports UNSUPPORTED_MODALITY,
+    not WEIGHTS_MISSING (verified live in container without weights).
+    """
+    from orp_ai.config import Settings
+
+    p = tmp_path / "ct.dcm"
+    p.write_bytes(_make_dicom_bytes(Modality="CT"))
+    missing = Settings(tb_weights=str(tmp_path / "nope.pt"))
+    out = run_task("tb-screening", p, missing, input_filename="ct.dcm")
+    assert out["status"] == "failed"
+    assert out["error"]["code"] == "UNSUPPORTED_MODALITY"
+
+
 def test_validate_dicom_only_codes(tmp_path):
     p = tmp_path / "ct.dcm"
     p.write_bytes(_make_dicom_bytes(Modality="CT"))
@@ -209,3 +225,36 @@ def test_adapter_threshold_is_explicitly_uncalibrated():
     assert a.threshold == 0.50
     assert a.calibration_status == "uncalibrated"
     assert user_reason("missing_pixel_data") == USER_REASONS["missing_pixel_data"]
+
+
+def _load_evaluate_module():
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "tb_evaluate.py"
+    spec = importlib.util.spec_from_file_location("tb_evaluate", path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_eval_roc_auc_known_values():
+    import numpy as np
+
+    mod = _load_evaluate_module()
+    perfect = np.array([0.9, 0.8, 0.2, 0.1])
+    labels = np.array([1, 1, 0, 0])
+    assert mod.roc_auc(perfect, labels) == 1.0
+    assert mod.roc_auc(1 - perfect, labels) == 0.0
+
+
+def test_eval_sweep_shape_and_youden():
+    import numpy as np
+
+    mod = _load_evaluate_module()
+    scores = np.array([0.9, 0.8, 0.2, 0.1])
+    labels = np.array([1, 1, 0, 0])
+    table = mod.sweep(scores, labels, grid=5)
+    assert len(table) == 5
+    assert all({"threshold", "sensitivity", "specificity", "youden"} <= set(r) for r in table)
+    assert max(r["youden"] for r in table) == 1.0

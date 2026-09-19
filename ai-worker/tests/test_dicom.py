@@ -1,7 +1,8 @@
-"""Tests for the M8 DICOM input adapter (dicom.py).
+"""Tests for the gateway DICOM pipeline (dicom/reader+validator+preprocessing).
 
 These tests use synthetic DICOM datasets created on-the-fly via pydicom to
 exercise all validation paths and preprocessing branches without external files.
+(Moved from orp_ai.dicom M8 contract — same coverage, new package.)
 """
 
 from __future__ import annotations
@@ -16,17 +17,20 @@ from pydicom.dataset import Dataset
 from pydicom.uid import ExplicitVRLittleEndian
 from PIL import Image
 
-from orp_ai.dicom import (
+from ai_gateway.dicom.preprocessing import (
+    apply_rescale,
+    apply_voi_lut,
+    convert_ybr_to_monochrome2,
+    handle_pixel_representation,
+    normalize_monochrome1,
+    window_to_8bit,
+)
+from ai_gateway.dicom.reader import read_dicom_as_pil
+from ai_gateway.dicom.validator import (
     DicomInputConfig,
     DicomValidationError,
     TB_DICOM_CONFIG,
-    read_dicom_as_pil,
     validate_dicom_only,
-    _apply_rescale,
-    _apply_voi_lut,
-    _handle_pixel_representation,
-    _normalize_monochrome1,
-    _window_to_8bit,
 )
 
 
@@ -251,11 +255,11 @@ def test_ybr_full_422_extracts_luminance():
     # This is tested via the helper function since creating valid YBR_FULL_422
     # synthetic DICOM requires precise byte layout. The helper logic is:
     # if photometric == "YBR_FULL_422" and arr.ndim == 3: arr = arr[:,:,0]
-    from orp_ai.dicom import _convert_ybr_to_monochrome2
+    from ai_gateway.dicom.preprocessing import convert_ybr_to_monochrome2
     arr = np.random.randint(0, 255, (10, 10, 3), dtype=np.uint16)
     ds = Dataset()
     ds.PhotometricInterpretation = "YBR_FULL_422"
-    out = _convert_ybr_to_monochrome2(arr, ds)
+    out = convert_ybr_to_monochrome2(arr, ds)
     assert out.shape == (10, 10)
     np.testing.assert_array_equal(out, arr[:, :, 0])
 
@@ -270,7 +274,7 @@ def test_apply_rescale():
     ds = Dataset()
     ds.RescaleSlope = 2.0
     ds.RescaleIntercept = -100.0
-    out = _apply_rescale(arr, ds)
+    out = apply_rescale(arr, ds)
     expected = np.array([-100, 1900, 3900, 5900], dtype=np.float32)
     np.testing.assert_allclose(out, expected)
 
@@ -280,7 +284,7 @@ def test_apply_voi_lut():
     ds = Dataset()
     ds.WindowCenter = 0.5
     ds.WindowWidth = 1.0
-    out = _apply_voi_lut(arr, ds)
+    out = apply_voi_lut(arr, ds)
     # (x - (0.5-0.5))/1.0 + 0.5 = x + 0.5
     expected = np.clip(arr + 0.5, 0.0, 1.0)
     np.testing.assert_allclose(out, expected)
@@ -291,7 +295,7 @@ def test_handle_pixel_representation_signed():
     ds = Dataset()
     ds.BitsStored = 12
     ds.PixelRepresentation = 1
-    out = _handle_pixel_representation(arr, ds)
+    out = handle_pixel_representation(arr, ds)
     shift = 1 << 11  # 2048
     expected = np.array([1948, 2048, 2148], dtype=np.float32)
     np.testing.assert_allclose(out, expected)
@@ -301,15 +305,15 @@ def test_handle_pixel_representation_unsigned():
     arr = np.array([0, 100, 200], dtype=np.uint16)
     ds = Dataset()
     ds.PixelRepresentation = 0
-    out = _handle_pixel_representation(arr, ds)
+    out = handle_pixel_representation(arr, ds)
     np.testing.assert_allclose(out, arr.astype(np.float32))
 
 
-def test_normalize_monochrome1():
+def testnormalize_monochrome1():
     arr = np.array([0, 100, 200], dtype=np.float32)
     ds = Dataset()
     ds.PhotometricInterpretation = "MONOCHROME1"
-    out = _normalize_monochrome1(arr, ds)
+    out = normalize_monochrome1(arr, ds)
     # max - val: 200 - [0,100,200] = [200,100,0]
     expected = np.array([200, 100, 0], dtype=np.float32)
     np.testing.assert_allclose(out, expected)
@@ -319,13 +323,13 @@ def test_normalize_monochrome2_unchanged():
     arr = np.array([0, 100, 200], dtype=np.float32)
     ds = Dataset()
     ds.PhotometricInterpretation = "MONOCHROME2"
-    out = _normalize_monochrome1(arr, ds)
+    out = normalize_monochrome1(arr, ds)
     np.testing.assert_allclose(out, arr)
 
 
 def test_window_to_8bit_percentile():
     arr = np.array([0.0, 0.25, 0.5, 0.75, 1.0], dtype=np.float32)
-    out = _window_to_8bit(arr, method="percentile")
+    out = window_to_8bit(arr, method="percentile")
     # 1st and 99th percentile on 5 elements with linear interpolation
     # numpy percentile gives lo=0.0, hi=1.0 for this case
     # Actual mapping: 0->0, 0.25->62, 0.5->127, 0.75->192, 1->255
@@ -335,7 +339,7 @@ def test_window_to_8bit_percentile():
 
 def test_window_to_8bit_voi():
     arr = np.array([-0.5, 0.0, 0.5, 1.0, 1.5], dtype=np.float32)
-    out = _window_to_8bit(arr, method="voi")
+    out = window_to_8bit(arr, method="voi")
     # VOI: clip to [0,1] then *255
     expected = np.array([0, 0, 127, 255, 255], dtype=np.uint8)
     np.testing.assert_array_equal(out, expected)

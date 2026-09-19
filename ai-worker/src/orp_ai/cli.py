@@ -55,10 +55,8 @@ def cmd_batch(args: argparse.Namespace) -> None:
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
-    # Cutover M11: default ke AI Gateway (ai_gateway.server); --legacy
-    # mempertahankan server lama orp_ai.server untuk rollback darurat.
-    app = "orp_ai.server:app" if args.legacy else "ai_gateway.server:app"
-    uvicorn.run(app, host=args.host, port=args.port, reload=args.reload)
+    # M11: serve selalu AI Gateway (server lama orp_ai.server sudah dihapus).
+    uvicorn.run("ai_gateway.server:app", host=args.host, port=args.port, reload=args.reload)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -88,11 +86,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--host", type=str, default="0.0.0.0")
     p_serve.add_argument("--port", type=int, default=8000)
     p_serve.add_argument("--reload", action="store_true")
-    p_serve.add_argument(
-        "--legacy",
-        action="store_true",
-        help="serve legacy orp_ai.server instead of ai_gateway.server (rollback)",
-    )
     p_serve.set_defaults(func=cmd_serve)
 
     return parser

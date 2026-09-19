@@ -128,7 +128,18 @@ class TBScreeningAdapter:
         settings: Any | None = None,
         device: str = "cpu",
     ) -> dict[str, Any]:
-        """Raw payload (no envelope). Raises DicomValidationError / ValueError."""
+        """Raw payload (no envelope). Raises DicomValidationError / ValueError.
+
+        Order is deliberate: input validation FIRST (INVALID -> AI NOT RUN
+        with the input reason even when weights are missing), weights second.
+        """
+        path = Path(file_path)
+        if path.suffix.lower() == ".dcm":
+            verdict = validate_dicom_only(path, TB_DICOM_CONFIG)
+            if not verdict["valid"]:
+                raise DicomValidationError(
+                    str(verdict["reason"]), code=str(verdict["reason_code"])
+                )
         env_override = self.tb_weights_env or (
             settings.tb_weights if settings is not None and getattr(settings, "tb_weights", None) else None
         )

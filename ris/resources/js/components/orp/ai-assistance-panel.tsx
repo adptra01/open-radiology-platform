@@ -183,7 +183,7 @@ function TaskCard({
  * Capability-driven: daftar task dari GET /api/ai/capabilities, riwayat dari
  * GET /api/ai/runs?study_id=. Satu-satunya implementation nyata: tb-screening.
  * Hasil legacy (raw_report['tb']) ditampilkan di seksi "Riwayat lama" bila
- * belum ada canonical run — AiTbCard tetap mounted sebagai fallback.
+ * belum ada canonical run.
  */
 export function AiAssistancePanel({
     study,

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+### Changed — Sisa big-bang tuntas: image ai-worker + hapus legacy + harness evaluasi (2026-09-19)
+- **Validasi-dulu**: adapter TB memvalidasi input SEBELUM cek bobot (CT tanpa bobot → `UNSUPPORTED_MODALITY`, bukan `WEIGHTS_MISSING`) — sesuai diagram validasi; terverifikasi live di container rebuild + test `test_validation_runs_before_weights_check`.
+- **Image `dcm4che-ai-worker` di-rebuild + terverifikasi di container**: health ok (`ai_gateway/0.2.0`), capabilities 1 task (available:false jujur tanpa bobot di image), CT→failed `UNSUPPORTED_MODALITY`, unknown→404.
+- **Legacy dihapus**: `orp_ai/{server,tb,adapters,dicom}.py`, `tests/test_gateway.py`, flag `--legacy`, `AiTbCard` (+mount). Test kontrak DICOM di-retarget ke `ai_gateway` (26 test utuh); `test_smoke` kini murni xrv; jalur xrv `/infer` tetap menyertakan blok tb-legacy via dispatcher (`_tb_report_compat`).
+- **Harness evaluasi Phase 3** (`ai-worker/scripts/tb_evaluate.py`, tanpa dep baru): ROC-AUC Mann-Whitney + sweep sens/spec + rekomendasi Youden → `report.json`; self-test sintetis `--synthetic` terbukti jalan (metrik jujur tak bermakna). Unit test matematika dikunci.
+- **Colab retry 1×**: masih gagal (traceback kuota/API, session tak terbentuk) — tetap dilewati; Kaggle manual fallback.
+- **Suite**: pytest **46 passed**, phpunit **135 passed**, tsc 0, build 5.84s via ddev.
+
 ### Changed — Cutover entrypoint ke ai_gateway.server (2026-09-19)
 - `orp-ai serve` default kini `ai_gateway.server:app`; flag baru `--legacy` untuk rollback darurat ke `orp_ai.server:app`. Dockerfile CMD **tidak berubah** (otomatis ikut cutover); healthcheck `/health` tetap valid (gateway mengeksposnya + marker `gateway:"ai_gateway/0.2.0"`).
 - **Bukti live**: default → health ok + xrv `/infer` 5 findings; `--legacy` → health ok (tanpa marker) + `/infer/tb` True/0.5299 (bobot dummy). Sisa M11-Phase 2: hapus shim `orp_ai` + card legacy setelah masa observasi.

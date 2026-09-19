@@ -11,7 +11,6 @@ import torchxrayvision as xrv
 
 from .config import Settings
 from .model import load_model
-from .tb import predict_tb
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +51,39 @@ def _matches(name: str, keywords: tuple[str, ...]) -> bool:
     return any(k in lower for k in keywords)
 
 
+def _tb_report_compat(img_path: str | Path, settings: Settings | None = None) -> dict[str, Any]:
+    """TB block for the legacy xrv report — via the gateway dispatcher.
+
+    Returns the legacy shape ``{available, probability, note}`` so old
+    consumers (RunAiInference, card) keep working. New code must use the
+    gateway envelope (``POST /infer/tb-screening``) instead.
+    """
+    from ai_gateway.core.registry import run_task
+
+    try:
+        env = run_task("tb-screening", img_path, settings, input_filename=Path(img_path).name)
+    except Exception as exc:  # noqa: BLE001 — never fail xrv inference for TB
+        log.warning("TB compat block skipped for %s: %s", img_path, exc)
+        return {"available": False, "probability": None, "note": f"TB unavailable: {exc}"}
+    if env.get("status") == "completed":
+        cls = env["result"]["classification"]
+        return {
+            "available": True,
+            "probability": cls["score"],
+            "label": cls["label"],
+            "model": env.get("model"),
+            "note": env["metadata"]["disclaimer"],
+        }
+    err = env.get("error", {})
+    return {
+        "available": False,
+        "probability": None,
+        "reason_code": env["metadata"].get("reason_code"),
+        "reason": err.get("message"),
+        "note": env["metadata"].get("note") or err.get("message"),
+    }
+
+
 def predict(img_path: str | Path, settings: Settings | None = None) -> dict[str, Any]:
     """Run inference on one image and return a structured report."""
     settings = settings or Settings.from_env()
@@ -74,7 +106,7 @@ def predict(img_path: str | Path, settings: Settings | None = None) -> dict[str,
         for n, p in pathologies.items()
         if _matches(n, _LUNG_KEYWORDS) and not _matches(n, _TB_KEYWORDS)
     }
-    tb_report = predict_tb(img_path, settings)  # fine-tuned DenseNet, if available
+    tb_report = _tb_report_compat(img_path, settings)  # gateway TB adapter, legacy shape
 
     return {
         "source": str(img_path),
