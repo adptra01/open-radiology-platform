@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+### Changed — M12.1 + M12.2: reporting aman + DICOM/PACS reliabel (2026-09-20)
+- **B1 otorisasi ReportController**: GET→`reports.view`, POST→`reports.create`, PUT→`reports.edit`, transition→`reports.sign`, DELETE→`reports.edit`, amend→`reports.sign`. User tanpa izin → 403 (4 test).
+- **B4 FINAL immutable**: DELETE FINAL → 422; amendment = record BARU (`parent_report_id`, lahir DRAFT, lifecycle normal, audit `report.amended`); `awaitingReport` hanya FINAL (DRAFT/CANCELLED tetap menunggu — 1 test lama diperbaiki karena mengkodekan bug).
+- **B2 STOW auth**: `ProcessTransmission` via `PacsClient::stowFile` (Basic auth) — tanpa duplikasi HTTP; test header auth; perbaiki respons error tanpa kunci `status`.
+- **B3 sukses-palsu**: C-STORE → `0xA700` + ErrorComment saat RIS unreachable (modality retry); test 4 kasus.
+- **B5 storage reference**: adapter kirim `storage_key` relatif + `file_path`; RIS resolve via `ORP_INBOX_PATH` (fallback bila absolut tak terbaca) + warning log; volume bersama `orp-dicom-inbox` (dev+prod+ddev ro, terverifikasi `ls` di ddev); `queueTransmission` warning saat skip.
+- **Suite**: phpunit **145 passed**, pytest ai-worker **46**, adapter **16**, tsc 0.
+
+### Added — RIS Completion Audit: gap analysis M1–M10 (2026-09-19)
+- **AI di-freeze** (kecuali evaluasi GPU); fokus ke kelengkapan RIS sebagai aplikasi RS. Audit 3 jalur paralel (backend/frontend/DICOM) berbasis kode nyata → `docs/RIS-completion-audit.md`.
+- **DoD**: Core 🟡 / Clinical 🟡 / Operational 🟡 / Governance 🟡 — **baseline BELUM selesai**. 12 area PARTIAL, 1 MISSING (notifikasi), 1 DONE (infra).
+- **5 bug kritis**: B1 ReportController tanpa otorisasi · B2 STOW tanpa Basic auth (401 permanen) · B3 C-STORE sukses palsu saat RIS down · B4 FINAL bisa dihapus + awaitingReport salah hitung · B5 file_path volume adapter↔RIS.
+- **Rencana fix**: Batch 1 (B1+B4) → Batch 2 (B2+B3+B5) → Batch 3 (klinik) → Batch 4 (governance) → Batch 5 (operasi).
+
 ### Added — Auditability AI penuh: ai_runs → audit log → history UI (2026-09-19)
 - **Event audit** (konvensi `snake.dot` ala codebase): `ai_run.created` (controller store), `ai_run.started/completed/failed` (job, user=`created_by`), `ai_run.viewed` (detail). Changes HANYA referensi (run/task/model/status/kode/label/score) — tanpa pixel data, path file, maupun isi DICOM (hasil penuh di `ai_runs.result`).
 - **Korelasi**: `auditable` polimorfik ke AiRun + `run_id` di setiap changes; muncul otomatis di halaman `/audit` (filter `?action=ai_run.*`).

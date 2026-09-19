@@ -130,7 +130,9 @@ class OrderController extends Controller
     {
         $this->authorizePermission($request, 'orders.view');
 
-        $hasFinalReport = fn ($q) => $q->whereIn('status', array_column(\App\Enums\ReportStatus::cases(), 'value'));
+        // Menunggu laporan = order Completed yang BELUM punya report FINAL.
+        // DRAFT/CANCELLED tidak dihitung selesai (M12.1).
+        $hasFinalReport = fn ($q) => $q->where('status', \App\Enums\ReportStatus::Final->value);
 
         $orders = Order::query()
             ->with(['patient', 'procedure'])

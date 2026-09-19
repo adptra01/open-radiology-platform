@@ -70,6 +70,9 @@ services:
       # Password bootstrap login trial (dipakai orp:create-user; kosong = wajib --password)
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
 
+      # M12.2 B5: disk root inbox DICOM bersama adapter (storage reference).
+      ORP_INBOX_PATH: /var/orp/inbox
+
     volumes:
       # Named volumes (bukan bind-mount): dir log di image sudah chown www-data;
       # bind-mount ./logs dibuat root oleh docker sehingga www-data tak bisa tulis
@@ -77,6 +80,8 @@ services:
       # `docker exec orp-ris tail -f /var/log/supervisor/…`.
       - ris-logs:/var/log/supervisor
       - nginx-logs:/var/log/nginx
+      # M12.2 B5: baca inbox DICOM adapter (read-only; tulis milik adapter).
+      - orp-dicom-inbox:/var/orp/inbox:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -220,6 +225,10 @@ services:
       ORP_STORE_PORT: "4245"
       ORP_RIS_API_URL: http://ris:8000/api
       ORP_RIS_API_KEY: ${ORP_RIS_API_KEY}
+      # M12.2 B5: inbox DICOM bersama via named volume (lihat bawah).
+      ORP_INBOX_DIR: /var/orp/inbox
+    volumes:
+      - orp-dicom-inbox:/var/orp/inbox
     depends_on:
       - ris
       - orthanc
@@ -230,6 +239,9 @@ volumes:
   pgdata:
   ris-logs:
   nginx-logs:
+  # M12.2 B5: filesystem bersama adapter↔ris (nama eksplisit agar stabil).
+  orp-dicom-inbox:
+    name: orp-dicom-inbox
 
 networks:
   orp-network:

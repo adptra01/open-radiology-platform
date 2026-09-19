@@ -182,7 +182,13 @@ class DicomController extends Controller
 
         $order = $accession !== '' ? Order::where('accession_number', $accession)->first() : null;
 
-        $study = DB::transaction(function () use ($payload, $order, $sopUid) {
+        // M12.2 B5: storage reference — file_path absolut legacy BUKAN kontrak
+        // antar-container. Bila tak terbaca, resolve via storage_key relatif +
+        // disk root lokal (ORP_INBOX_PATH). Nanti: local volume / NFS / S3
+        // tanpa ubah business logic.
+        $filePath = $this->resolveInboxFile($payload);
+
+        $study = DB::transaction(function () use ($payload, $order, $sopUid, $filePath) {
             $study = Study::updateOrCreate(
                 ['sop_instance_uid' => $sopUid],
                 [
@@ -194,7 +200,7 @@ class DicomController extends Controller
                     'study_description' => $payload['study_description'] ?? null,
                     'study_date' => $payload['study_date'] ?? null,
                     'study_time' => $payload['study_time'] ?? null,
-                    'file_path' => $payload['file_path'] ?? null,
+                    'file_path' => $filePath,
                     'patient_id' => $order?->patient_id,
                     'order_id' => $order?->id,
                     'matched' => $order !== null,
@@ -246,6 +252,41 @@ class DicomController extends Controller
             'transmission_id' => $transmission?->id,
             'ai_result_id' => $aiResult->id,
         ], $order !== null ? 200 : 201);
+    }
+
+    /**
+     * Resolve file DICOM via storage reference (M12.2 B5).
+     *
+     * Urutan: file_path absolut bila terbaca di container ini → storage_key
+     * relatif di-resolve terhadap ORP_INBOX_PATH (disk `dicom_inbox`) →
+     * null + warning (study TETAP disimpan; transmisi/AI skip + warning,
+     * bukan silent). Absolute path bukan kontrak antar-container.
+     */
+    protected function resolveInboxFile(array $payload): ?string
+    {
+        $absolute = $payload['file_path'] ?? null;
+        if (is_string($absolute) && $absolute !== '' && is_readable($absolute)) {
+            return $absolute;
+        }
+
+        $key = $payload['storage_key'] ?? null;
+        if (is_string($key) && $key !== '') {
+            $root = rtrim((string) config('services.dicom.inbox_path', env('ORP_INBOX_PATH', '/var/orp/inbox')), '/');
+            $candidate = $root . '/' . ltrim($key, '/');
+            if (is_readable($candidate)) {
+                return $candidate;
+            }
+        }
+
+        if (($absolute ?? $key) !== null) {
+            Log::warning('DICOM inbox file tidak terbaca di container ini', [
+                'file_path' => $absolute,
+                'storage_key' => $key,
+                'sop' => $payload['sop_instance_uid'] ?? null,
+            ]);
+        }
+
+        return null;
     }
 
     public function announceOnline(Request $request): JsonResponse

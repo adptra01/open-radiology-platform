@@ -69,6 +69,13 @@ class Study extends Model
     {
         $pacs = \App\Models\PacsSource::active()->whereNotNull('stow_url')->first();
         if (! $pacs || blank($this->file_path)) {
+            // M12.2: jangan silent — operator harus bisa melihat kenapa tak antre.
+            \Illuminate\Support\Facades\Log::warning('Transmisi dilewati (tanpa PACS/file)', [
+                'study_id' => $this->id,
+                'has_pacs' => (bool) $pacs,
+                'has_file' => ! blank($this->file_path),
+            ]);
+
             return null;
         }
 

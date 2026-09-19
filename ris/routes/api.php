@@ -70,6 +70,7 @@ Route::prefix('reports')->middleware($spa)->group(function () {
     Route::get('{report}', [ReportController::class, 'show']);
     Route::put('{report}', [ReportController::class, 'update']);
     Route::post('{report}/transition', [ReportController::class, 'transition']);
+    Route::post('{report}/amendments', [ReportController::class, 'amend']);
     Route::delete('{report}', [ReportController::class, 'destroy']);
 });
 

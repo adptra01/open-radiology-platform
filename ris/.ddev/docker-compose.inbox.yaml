@@ -1,0 +1,12 @@
+# M12.2 B5: share inbox DICOM adapter (named volume orp-dicom-inbox) ke ddev web.
+# Read-only: tulis milik container adapter; RIS hanya membaca file_path /
+# storage_key yang di-resolve via ORP_INBOX_PATH=/var/orp/inbox.
+# Volume dibuat saat `docker compose up` stack dev (adapter service).
+services:
+  web:
+    volumes:
+      - "orp-dicom-inbox:/var/orp/inbox:ro"
+
+volumes:
+  orp-dicom-inbox:
+    external: true

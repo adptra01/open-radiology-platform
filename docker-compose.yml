@@ -139,8 +139,15 @@ services:
       ORP_STORE_PORT: "4245"
       ORP_RIS_API_URL: ${ORP_RIS_API_URL:-http://ris:80/api}
       ORP_RIS_API_KEY: ${ORP_RIS_API_KEY:-change-me}
+      # M12.2 B5: inbox DICOM bersama (named volume; ddev web mount read-only).
+      ORP_INBOX_DIR: /var/orp/inbox
+    volumes:
+      - orp-dicom-inbox:/var/orp/inbox
     depends_on:
       - orthanc
 
 volumes:
   pgdata:
+  # M12.2 B5: filesystem bersama adapter↔ris (nama eksplisit agar stabil).
+  orp-dicom-inbox:
+    name: orp-dicom-inbox

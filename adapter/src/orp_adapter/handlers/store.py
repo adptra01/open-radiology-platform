@@ -77,10 +77,24 @@ def _handle_c_store(event: Event, ris: RisClient, settings) -> dict:
         }
 
         if settings.inbox_dir:
-            payload["file_path"] = _persist(dataset, settings.inbox_dir)
+            # M12.2 B5: kirim storage reference (key relatif) + file_path absolut
+            # legacy. RIS resolve via disk root-nya sendiri (ORP_INBOX_PATH) bila
+            # file_path tak terbaca lintas-container (local volume/NFS/S3 nanti).
+            saved = _persist(dataset, settings.inbox_dir)
+            payload["file_path"] = saved
+            try:
+                payload["storage_key"] = str(Path(saved).relative_to(settings.inbox_dir))
+            except ValueError:
+                payload["storage_key"] = Path(saved).name
 
         response = ris.forward_study(payload)
-        if response is not None and not response.ok:
+        if response is None:
+            # M12.2 B3: RIS unreachable/timeout — JANGAN sukses palsu.
+            # 0xA700 (Refused: Out of Resources) = temporary failure;
+            # modality harus retry, bukan menganggap terkirim.
+            logger.error("RIS unreachable — refusing C-STORE so modality retries")
+            return {"Status": 0xA700, "ErrorComment": "RIS unreachable, retry later"}
+        if not response.ok:
             logger.warning("study forward HTTP %s: %s", response.status_code, response.text[:200])
             return {"Status": 0x0128}
     except Exception as exc:

@@ -148,4 +148,107 @@ class ReportingLifecycleTest extends TestCase
             'auditable_id' => $report->id,
         ]);
     }
+
+    public function test_reports_endpoints_require_permission(): void
+    {
+        // M12.1 B1: user tanpa reports.* harus 403 di semua endpoint (backend, bukan UI).
+        $plain = User::factory()->create(['email' => 'plain@domain.test']);
+        $this->actingAs($plain);
+
+        $report = Report::create(['order_id' => $this->completedOrder->id]);
+
+        $this->getJson('/api/reports')->assertForbidden();
+        $this->postJson('/api/reports', ['order_id' => $this->completedOrder->id])->assertForbidden();
+        $this->putJson("/api/reports/{$report->id}", ['impression' => 'x'])->assertForbidden();
+        $this->postJson("/api/reports/{$report->id}/transition", ['target' => 'DICTATED'])->assertForbidden();
+        $this->postJson("/api/reports/{$report->id}/amendments", ['addendum' => 'x'])->assertForbidden();
+        $this->deleteJson("/api/reports/{$report->id}")->assertForbidden();
+    }
+
+    public function test_destroy_final_rejected_destroy_draft_allowed(): void
+    {
+        // M12.1 B4: FINAL immutable — hapus ditolak.
+        $final = Report::create(['order_id' => $this->completedOrder->id]);
+        $final->transitionTo(ReportStatus::Dictated);
+        $final->transitionTo(ReportStatus::Verified);
+        $final->transitionTo(ReportStatus::Final);
+
+        $this->deleteJson("/api/reports/{$final->id}")->assertStatus(422);
+        $this->assertDatabaseHas('reports', ['id' => $final->id]);
+
+        $draft = Report::create(['order_id' => $this->completedOrder->id]);
+        $this->deleteJson("/api/reports/{$draft->id}")->assertOk();
+        $this->assertSoftDeleted('reports', ['id' => $draft->id]);
+    }
+
+    public function test_amend_final_creates_child_record(): void
+    {
+        // M12.1 B4: amendment = record BARU (parent utuh), lahir DRAFT.
+        $final = Report::create([
+            'order_id' => $this->completedOrder->id,
+            'findings' => 'Asli',
+            'impression' => 'Kesan asli',
+        ]);
+        $final->transitionTo(ReportStatus::Dictated);
+        $final->transitionTo(ReportStatus::Verified);
+        $final->transitionTo(ReportStatus::Final);
+
+        $res = $this->postJson("/api/reports/{$final->id}/amendments", [
+            'addendum' => 'Koreksi: terdapat infiltrat lobus kanan.',
+        ]);
+        $res->assertStatus(201)->assertJsonPath('parent_report_id', $final->id);
+
+        // Parent tidak tersentuh.
+        $final->refresh();
+        $this->assertSame('Asli', $final->findings);
+        $this->assertTrue($final->status === ReportStatus::Final);
+
+        $child = Report::findOrFail($res->json('id'));
+        $this->assertTrue($child->status === ReportStatus::Draft);
+        $this->assertSame('Koreksi: terdapat infiltrat lobus kanan.', $child->addendum);
+        $this->assertCount(1, $final->amendments);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'report.amended',
+            'auditable_id' => $child->id,
+        ]);
+
+        // Amendment pada report non-FINAL ditolak.
+        $draft = Report::create(['order_id' => $this->completedOrder->id]);
+        $this->postJson("/api/reports/{$draft->id}/amendments", ['addendum' => 'x'])->assertStatus(422);
+    }
+
+    public function test_awaiting_report_only_final_counts_done(): void
+    {
+        // M12.1 B4: DRAFT/CANCELLED tidak dihitung selesai.
+        $mkOrder = function (): Order {
+            $patient = Patient::create(['name' => 'Await Person']);
+            $procedure = Procedure::where('code', 'R-CHEST-1V')->firstOrFail();
+            $order = Order::create(['patient_id' => $patient->id, 'procedure_id' => $procedure->id]);
+            $order->walkTo(\App\Enums\OrderStatus::Completed);
+
+            return $order;
+        };
+
+        $withDraft = $mkOrder();
+        Report::create(['order_id' => $withDraft->id]); // DRAFT
+
+        $withCancelled = $mkOrder();
+        $cancelled = Report::create(['order_id' => $withCancelled->id]);
+        $cancelled->transitionTo(ReportStatus::Dictated);
+        $cancelled->transitionTo(ReportStatus::Cancelled);
+
+        $withFinal = $mkOrder();
+        $final = Report::create(['order_id' => $withFinal->id]);
+        $final->transitionTo(ReportStatus::Dictated);
+        $final->transitionTo(ReportStatus::Verified);
+        $final->transitionTo(ReportStatus::Final);
+
+        $ids = collect($this->getJson('/api/orders/awaiting-report')->json('data'))->pluck('id')->all();
+        $this->assertContains($withDraft->id, $ids);
+        $this->assertContains($withCancelled->id, $ids);
+        $this->assertNotContains($withFinal->id, $ids);
+        // completedOrder milik setUp (tanpa report) ikut terdaftar.
+        $this->assertContains($this->completedOrder->id, $ids);
+    }
 }

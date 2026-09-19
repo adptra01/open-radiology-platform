@@ -80,7 +80,7 @@ class TransmissionQueueTest extends TestCase
         $transmission = $study->queueTransmission();
         $this->assertNotNull($transmission);
 
-        (new ProcessTransmission($transmission->fresh()))->handle();
+        (new ProcessTransmission($transmission->fresh()))->handle(app(\App\Services\PacsClient::class));
 
         $this->assertSame(TransmissionStatus::Sent, $transmission->fresh()->status);
         $this->assertNotNull($transmission->fresh()->sent_at);
@@ -103,7 +103,7 @@ class TransmissionQueueTest extends TestCase
             if ($t->status->value === TransmissionStatus::Failed->value) {
                 break;
             }
-            (new ProcessTransmission($t))->handle();
+            (new ProcessTransmission($t))->handle(app(\App\Services\PacsClient::class));
         }
 
         $this->assertSame(TransmissionStatus::Failed, $t->fresh()->status);
@@ -128,5 +128,24 @@ class TransmissionQueueTest extends TestCase
 
         $this->assertNull($study->queueTransmission());
         Queue::assertNothingPushed();
+    }
+
+    public function test_stow_sends_basic_auth_when_pacs_has_credentials(): void
+    {
+        // M12.2 B2: job HARUS lewat PacsClient (Basic auth), bukan raw HTTP.
+        $this->pacs->update(['username' => 'orp', 'password' => 's3cret']);
+
+        Http::fake([
+            'http://orthanc:8042/dicom-web/studies' => Http::response('ok', 200),
+        ]);
+
+        $study = $this->makeStudy();
+        $transmission = $study->queueTransmission();
+        $this->assertNotNull($transmission);
+
+        (new ProcessTransmission($transmission->fresh()))->handle(app(\App\Services\PacsClient::class));
+
+        $this->assertSame(TransmissionStatus::Sent, $transmission->fresh()->status);
+        Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Basic ' . base64_encode('orp:s3cret')));
     }
 }

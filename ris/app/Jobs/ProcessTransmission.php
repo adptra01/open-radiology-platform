@@ -6,12 +6,12 @@ use App\Enums\TransmissionStatus;
 use App\Models\PacsSource;
 use App\Models\Study;
 use App\Models\Transmission;
+use App\Services\PacsClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -38,7 +38,7 @@ class ProcessTransmission implements ShouldQueue
         //
     }
 
-    public function handle(): void
+    public function handle(PacsClient $client): void
     {
         // Hanya proses yang masih PENDING (hindari double-proses).
         if ($this->transmission->status->value !== TransmissionStatus::Pending->value) {
@@ -59,24 +59,19 @@ class ProcessTransmission implements ShouldQueue
 
         $filePath = data_get($this->transmission->payload, 'file_path');
 
-        try {
-            $response = Http::timeout(90)->attach(
-                'file',
-                fopen($filePath, 'r'),
-                basename((string) $filePath),
-                ['Content-Type' => 'application/dicom']
-            )->post($pacs->stow_url);
+        // M12.2 B2: kirim SELALU via PacsClient (satu-satunya jalur STOW —
+        // menyuntikkan Basic auth bila PACS ber-auth). Tanpa duplikasi HTTP.
+        $result = $client->stowFile($pacs, (string) $filePath);
 
-            if ($response->successful()) {
-                $this->transmission->markSent("HTTP {$response->status()}");
+        if ($result['ok']) {
+            $this->transmission->markSent("HTTP {$result['status']}");
 
-                return;
-            }
-
-            $this->retryOrFail("HTTP {$response->status()}: {$response->body()}");
-        } catch (\Throwable $e) {
-            $this->retryOrFail($e->getMessage());
+            return;
         }
+
+        $status = $result['status'] ?? 'ERR';
+        $detail = $result['error'] ?? $result['body'] ?? 'unknown error';
+        $this->retryOrFail("HTTP {$status}: {$detail}");
     }
 
     private function retryOrFail(string $error): void

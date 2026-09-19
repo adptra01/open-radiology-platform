@@ -16,6 +16,7 @@ class Report extends Model
     protected $fillable = [
         'order_id',
         'study_id',
+        'parent_report_id',
         'radiologist_id',
         'report_number',
         'status',
@@ -66,6 +67,38 @@ class Report extends Model
     public function radiologist()
     {
         return $this->belongsTo(User::class, 'radiologist_id');
+    }
+
+    public function parent()
+    {
+        return $this->belongsTo(Report::class, 'parent_report_id');
+    }
+
+    public function amendments()
+    {
+        return $this->hasMany(Report::class, 'parent_report_id')->latest();
+    }
+
+    public function isFinal(): bool
+    {
+        return $this->status === ReportStatus::Final;
+    }
+
+    /**
+     * Buat amendment sebagai RECORD BARU yang mereferensikan report FINAL ini.
+     * Record FINAL tidak pernah diubah/dihapus (M12.1). Amendment lahir sebagai
+     * DRAFT dan mengikuti lifecycle normal (DICTATED → VERIFIED → FINAL).
+     */
+    public function addAmendment(string $text, ?int $radiologistId): Report
+    {
+        return static::create([
+            'order_id' => $this->order_id,
+            'study_id' => $this->study_id,
+            'parent_report_id' => $this->id,
+            'radiologist_id' => $radiologistId,
+            'status' => ReportStatus::Draft,
+            'addendum' => $text,
+        ]);
     }
 
     /**

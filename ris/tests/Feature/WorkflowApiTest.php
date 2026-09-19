@@ -146,11 +146,19 @@ class WorkflowApiTest extends TestCase
             ->assertJsonCount(1, 'reports');
     }
 
-    public function test_awaiting_report_excludes_orders_with_report(): void
+    public function test_awaiting_report_excludes_orders_with_final_report(): void
     {
-        $withReport = $this->makeOrder();
-        $withReport->walkTo(OrderStatus::Completed);
-        Report::create(['order_id' => $withReport->id]);
+        // M12.1 B4: hanya FINAL yang dihitung selesai — DRAFT tetap menunggu.
+        $withDraft = $this->makeOrder();
+        $withDraft->walkTo(OrderStatus::Completed);
+        Report::create(['order_id' => $withDraft->id]);
+
+        $withFinal = $this->makeOrder();
+        $withFinal->walkTo(OrderStatus::Completed);
+        $final = Report::create(['order_id' => $withFinal->id]);
+        $final->transitionTo(\App\Enums\ReportStatus::Dictated);
+        $final->transitionTo(\App\Enums\ReportStatus::Verified);
+        $final->transitionTo(\App\Enums\ReportStatus::Final);
 
         $withoutReport = $this->makeOrder();
         $withoutReport->walkTo(OrderStatus::Completed);
@@ -161,7 +169,8 @@ class WorkflowApiTest extends TestCase
 
         $ids = array_column($response->json('data'), 'id');
         $this->assertContains($withoutReport->id, $ids);
-        $this->assertNotContains($withReport->id, $ids);
+        $this->assertContains($withDraft->id, $ids);
+        $this->assertNotContains($withFinal->id, $ids);
     }
 
     public function test_appointment_lifecycle_and_transitions(): void

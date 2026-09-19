@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Enums\ReportStatus;
+use App\Http\Controllers\Api\Concerns\AuthorizesPermissions;
 use App\Models\Order;
 use App\Models\Report;
 use App\Models\Study;
@@ -13,12 +14,19 @@ use Illuminate\Routing\Controller;
 
 /**
  * Reporting — CRUD report + transisi status DRAFT → DICTATED → VERIFIED → FINAL.
- * Endpoint web (bukan DICOM adapter): dilindungi auth + RBAC biasa.
+ * Endpoint web (bukan DICOM adapter): dilindungi auth + RBAC backend (M12.1):
+ *   GET → reports.view | POST → reports.create | PUT → reports.edit
+ *   transition → reports.sign | DELETE → reports.edit | amendments → reports.sign
+ * FINAL immutable: edit/delete/overwrite ditolak; koreksi via amendment record baru.
  */
 class ReportController extends Controller
 {
+    use AuthorizesPermissions;
+
     public function index(Request $request): JsonResponse
     {
+        $this->authorizePermission($request, 'reports.view');
+
         $reports = Report::query()
             ->with(['order.patient', 'order.procedure', 'radiologist'])
             ->when($request->string('status')->toString(), fn ($q, $s) => $q->where('status', $s))
@@ -29,9 +37,11 @@ class ReportController extends Controller
         return response()->json($reports);
     }
 
-    public function show(Report $report): JsonResponse
+    public function show(Request $request, Report $report): JsonResponse
     {
-        $report->load(['order.patient', 'order.procedure', 'order.modality', 'study', 'radiologist']);
+        $this->authorizePermission($request, 'reports.view');
+
+        $report->load(['order.patient', 'order.procedure', 'order.modality', 'study', 'radiologist', 'amendments']);
 
         return response()->json($report);
     }
@@ -42,6 +52,8 @@ class ReportController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $this->authorizePermission($request, 'reports.create');
+
         $data = $request->validate([
             'order_id' => ['required', 'exists:orders,id'],
             'findings' => ['nullable', 'string'],
@@ -64,6 +76,8 @@ class ReportController extends Controller
 
     public function update(Request $request, Report $report): JsonResponse
     {
+        $this->authorizePermission($request, 'reports.edit');
+
         if (! $report->status->isEditable()) {
             return response()->json(['message' => 'Report sudah final/verified, tidak bisa diedit.'], 422);
         }
@@ -85,6 +99,8 @@ class ReportController extends Controller
      */
     public function transition(Request $request, Report $report): JsonResponse
     {
+        $this->authorizePermission($request, 'reports.sign');
+
         $data = $request->validate([
             'target' => ['required', 'string'],
         ]);
@@ -105,9 +121,43 @@ class ReportController extends Controller
 
     public function destroy(Request $request, Report $report): JsonResponse
     {
+        $this->authorizePermission($request, 'reports.edit');
+
+        // FINAL immutable (M12.1): hapus ditolak — koreksi hanya via amendment.
+        if ($report->isFinal()) {
+            return response()->json(['message' => 'Report FINAL tidak bisa dihapus. Buat amendment bila perlu koreksi.'], 422);
+        }
+
         $report->delete();
         AuditLog::record('report.deleted', $report);
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Amendment post-FINAL (M12.1): record BARU yang mereferensikan report
+     * FINAL via parent_report_id. Record FINAL tidak pernah diubah.
+     * Amendment lahir DRAFT dan mengikuti lifecycle normal.
+     * Permission: reports.sign (tindakan senior, setara verifikasi).
+     */
+    public function amend(Request $request, Report $report): JsonResponse
+    {
+        $this->authorizePermission($request, 'reports.sign');
+
+        if (! $report->isFinal()) {
+            return response()->json(['message' => 'Hanya report FINAL yang bisa diberi amendment.'], 422);
+        }
+
+        $data = $request->validate([
+            'addendum' => ['required', 'string', 'max:10000'],
+        ]);
+
+        $amendment = $report->addAmendment($data['addendum'], $request->user()?->id);
+        AuditLog::record('report.amended', $amendment, [
+            'parent_report_id' => $report->id,
+            'parent_report_number' => $report->report_number,
+        ]);
+
+        return response()->json($amendment->load('parent'), 201);
     }
 }

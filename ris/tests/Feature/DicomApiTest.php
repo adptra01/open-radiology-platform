@@ -317,6 +317,31 @@ class DicomApiTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_study_forward_resolves_storage_key_via_inbox_disk(): void
+    {
+        // M12.2 B5: storage_key relatif di-resolve via ORP_INBOX_PATH bila
+        // file_path absolut tak terbaca lintas-container.
+        $inbox = sys_get_temp_dir() . '/inbox-' . uniqid();
+        mkdir($inbox);
+        file_put_contents($inbox . '/study1.dcm', 'fake-dicom-bytes');
+        config(['services.dicom.inbox_path' => $inbox]);
+
+        $this->postJson('/api/dicom/studies', [
+            'accession_number' => 'ACC-00000000-0000',
+            'study_instance_uid' => '9.9.8.9',
+            'series_instance_uid' => '9.9.8.8',
+            'sop_instance_uid' => '9.9.8.7',
+            'modality' => 'CR',
+            'file_path' => '/nonexistent/container/path/study1.dcm',
+            'storage_key' => 'study1.dcm',
+        ], $this->withApiKey())->assertStatus(201);
+
+        $this->assertDatabaseHas('studies', [
+            'sop_instance_uid' => '9.9.8.7',
+            'file_path' => $inbox . '/study1.dcm',
+        ]);
+    }
+
     public function test_adapter_announce_online_creates_audit(): void
     {
         $this->postJson('/api/dicom/adapters/online', [
