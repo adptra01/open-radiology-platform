@@ -263,14 +263,34 @@ export function AiAssistancePanel({
                         Riwayat AI
                     </div>
                     {runs.map((r) => (
-                        <div
-                            key={r.run_id}
-                            className="text-muted-foreground flex items-center justify-between gap-2 text-[11px]"
-                        >
-                            <code>{r.run_id}</code>
-                            <span>
-                                {r.task_id} · {runStatusLabel(r.status)}
-                            </span>
+                        <div key={r.run_id} className="mt-1 text-[11px]">
+                            <div className="flex items-center justify-between gap-2">
+                                <code>{r.run_id}</code>
+                                <span className="text-muted-foreground">
+                                    {runStatusLabel(r.status)}
+                                </span>
+                            </div>
+                            <div className="text-muted-foreground">
+                                {r.created_at
+                                    ? new Date(r.created_at).toLocaleString('id-ID')
+                                    : '—'}
+                                {' · '}
+                                {r.user?.name ?? 'sistem'}
+                                {' · '}
+                                {r.task_id}
+                                {r.model_id
+                                    ? ` · ${r.model_id} v${r.model_version ?? '—'}`
+                                    : ''}
+                                {r.status === 'completed' &&
+                                r.result?.classification
+                                    ? ` · ${r.result.classification.label} ${Math.round(
+                                          r.result.classification.score * 100,
+                                      )}%`
+                                    : ''}
+                                {r.status === 'failed' && r.error_code
+                                    ? ` · ${r.error_code}`
+                                    : ''}
+                            </div>
                         </div>
                     ))}
                 </div>

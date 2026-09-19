@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### Added — Auditability AI penuh: ai_runs → audit log → history UI (2026-09-19)
+- **Event audit** (konvensi `snake.dot` ala codebase): `ai_run.created` (controller store), `ai_run.started/completed/failed` (job, user=`created_by`), `ai_run.viewed` (detail). Changes HANYA referensi (run/task/model/status/kode/label/score) — tanpa pixel data, path file, maupun isi DICOM (hasil penuh di `ai_runs.result`).
+- **Korelasi**: `auditable` polimorfik ke AiRun + `run_id` di setiap changes; muncul otomatis di halaman `/audit` (filter `?action=ai_run.*`).
+- **UI panel**: riwayat kini tanggal/user/model/hasil; status run beda tegas dari label Negatif; disclaimer + technical-details toggle tetap. `tsc` 0, build OK.
+- **Compliance check**: satu-satunya pembaca `raw_report['tb']` tinggal seksi legacy panel + dual-write job; trigger tetap manual (auto-dispatch C-STORE lama tak diubah); envelope/validasi tak berubah.
+- **Test**: 4 test audit baru (korelasi, lifecycle, error_code, viewed, tanpa-pixel). Suite: phpunit **139 passed**.
+
 ### Changed — Sisa big-bang tuntas: image ai-worker + hapus legacy + harness evaluasi (2026-09-19)
 - **Validasi-dulu**: adapter TB memvalidasi input SEBELUM cek bobot (CT tanpa bobot → `UNSUPPORTED_MODALITY`, bukan `WEIGHTS_MISSING`) — sesuai diagram validasi; terverifikasi live di container rebuild + test `test_validation_runs_before_weights_check`.
 - **Image `dcm4che-ai-worker` di-rebuild + terverifikasi di container**: health ok (`ai_gateway/0.2.0`), capabilities 1 task (available:false jujur tanpa bobot di image), CT→failed `UNSUPPORTED_MODALITY`, unknown→404.

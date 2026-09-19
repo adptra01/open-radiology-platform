@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\AiResult;
 use App\Models\AiRun;
+use App\Models\AuditLog;
 use App\Services\AiClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -43,16 +44,19 @@ class RunAiRun implements ShouldQueue
         $study = $this->run->study()->with('order.patient')->first();
         if (! $study || blank($study->file_path)) {
             $this->run->markFailed('MISSING_INPUT', 'Study tidak punya file_path (file fisik belum tersedia).');
+            $this->audit('ai_run.failed', ['error_code' => 'MISSING_INPUT']);
 
             return;
         }
 
         $this->run->markRunning();
+        $this->audit('ai_run.started', ['status' => AiRun::STATUS_RUNNING]);
 
         $result = $client->inferTask($this->run->task_id, $study->file_path);
 
         if (! $result['ok'] || ! is_array($result['envelope'])) {
             $this->run->markFailed('GATEWAY_UNREACHABLE', $result['error'] ?? 'AI Gateway tidak terjangkau.');
+            $this->audit('ai_run.failed', ['error_code' => 'GATEWAY_UNREACHABLE']);
             Log::warning('AI run transport failed', ['run_id' => $this->run->run_id, 'error' => $result['error'] ?? null]);
 
             return;
@@ -69,6 +73,12 @@ class RunAiRun implements ShouldQueue
         if (($envelope['status'] ?? null) === 'completed') {
             $this->run->markCompleted($envelope);
             $this->writeLegacyCompat($envelope);
+            $this->audit('ai_run.completed', [
+                'status' => AiRun::STATUS_COMPLETED,
+                'label' => $envelope['result']['classification']['label'] ?? null,
+                'score' => $envelope['result']['classification']['score'] ?? null,
+                'threshold' => $envelope['result']['classification']['threshold'] ?? null,
+            ]);
             Log::info('AI run completed', [
                 'run_id' => $this->run->run_id,
                 'task' => $this->run->task_id,
@@ -82,6 +92,22 @@ class RunAiRun implements ShouldQueue
         $this->run->markFailed(
             $envelope['error']['code'] ?? 'INFERENCE_ERROR',
             $envelope['error']['message'] ?? 'AI tidak dapat memproses input ini.'
+        );
+        $this->audit('ai_run.failed', ['error_code' => $this->run->error_code]);
+    }
+
+    /**
+     * Catat event audit untuk run ini. User = pembuat run (job tanpa request
+     * HTTP). Isi changes HANYA referensi (run/task/model/status/kode) —
+     * tidak pernah pixel data, path file, maupun isi DICOM.
+     */
+    protected function audit(string $action, array $extra = []): void
+    {
+        AuditLog::record(
+            $action,
+            $this->run,
+            array_merge(['run_id' => $this->run->run_id, 'task_id' => $this->run->task_id], $extra),
+            $this->run->created_by,
         );
     }
 
@@ -121,8 +147,8 @@ class RunAiRun implements ShouldQueue
     }
 
     /**
-     * Dual-write legacy: cerminkan hasil ke AiResult/raw_report agar UI lama
-     * (AiTbCard membaca raw_report['tb']) tetap berfungsi. Bukan sumber utama.
+     * Dual-write legacy: cerminkan hasil ke AiResult/raw_report agar pembaca
+     * legacy (seksi "Riwayat lama" panel) tetap berfungsi. Bukan sumber utama.
      */
     protected function writeLegacyCompat(array $envelope): void
     {

@@ -240,4 +240,80 @@ class AiRunsTest extends TestCase
 
         $this->assertSame(AiRun::STATUS_COMPLETED, $run->refresh()->status);
     }
+
+    public function test_store_writes_created_audit_with_run_correlation(): void
+    {
+        Queue::fake();
+        $this->fakeCapabilities();
+        $study = $this->makeStudy($this->makeOrder());
+
+        $runId = $this->postJson('/api/ai/runs', ['study_id' => $study->id, 'task_id' => 'tb-screening'])->json('run_id');
+
+        $audit = \App\Models\AuditLog::where('action', 'ai_run.created')->firstOrFail();
+        $this->assertSame($runId, $audit->changes['run_id']);
+        $this->assertSame('tb-screening', $audit->changes['task_id']);
+        $this->assertSame('App\\Models\\AiRun', $audit->auditable_type);
+        // Tanpa pixel data / isi DICOM di audit log.
+        $dump = json_encode([$audit->changes, $audit->auditable_type]);
+        $this->assertStringNotContainsStringIgnoringCase('pixeldata', $dump);
+        $this->assertStringNotContainsString('file_path', $dump);
+    }
+
+    public function test_job_writes_lifecycle_audits(): void
+    {
+        $this->fakeCapabilities();
+        Http::fake(['*/infer/tb-screening' => Http::response($this->completedEnvelope(), 200)]);
+
+        $study = $this->makeStudy($this->makeOrder());
+        $run = AiRun::create([
+            'run_id' => app(\App\Services\IdentifierService::class)->nextRunId(),
+            'study_id' => $study->id,
+            'task_id' => 'tb-screening',
+            'status' => AiRun::STATUS_QUEUED,
+        ]);
+
+        (new RunAiRun($run))->handle(app(\App\Services\AiClient::class));
+
+        $actions = \App\Models\AuditLog::where('auditable_type', 'App\\Models\\AiRun')
+            ->where('auditable_id', $run->id)->pluck('action')->all();
+        $this->assertContains('ai_run.started', $actions);
+        $this->assertContains('ai_run.completed', $actions);
+    }
+
+    public function test_job_failed_audit_carries_error_code(): void
+    {
+        $this->fakeCapabilities();
+        Http::fake(['*/infer/tb-screening' => Http::response($this->failedEnvelope(), 200)]);
+
+        $study = $this->makeStudy($this->makeOrder());
+        $run = AiRun::create([
+            'run_id' => app(\App\Services\IdentifierService::class)->nextRunId(),
+            'study_id' => $study->id,
+            'task_id' => 'tb-screening',
+            'status' => AiRun::STATUS_QUEUED,
+        ]);
+
+        (new RunAiRun($run))->handle(app(\App\Services\AiClient::class));
+
+        $audit = \App\Models\AuditLog::where('action', 'ai_run.failed')
+            ->where('auditable_id', $run->id)->firstOrFail();
+        $this->assertSame('UNSUPPORTED_MODALITY', $audit->changes['error_code']);
+    }
+
+    public function test_show_writes_viewed_audit(): void
+    {
+        $run = AiRun::create([
+            'run_id' => app(\App\Services\IdentifierService::class)->nextRunId(),
+            'study_id' => $this->makeStudy($this->makeOrder())->id,
+            'task_id' => 'tb-screening',
+            'status' => AiRun::STATUS_COMPLETED,
+        ]);
+
+        $this->getJson("/api/ai/runs/{$run->run_id}")->assertOk();
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'ai_run.viewed',
+            'auditable_id' => $run->id,
+        ]);
+    }
 }

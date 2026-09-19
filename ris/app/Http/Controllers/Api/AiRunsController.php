@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Jobs\RunAiRun;
 use App\Models\AiRun;
+use App\Models\AuditLog;
 use App\Models\Study;
 use App\Services\AiClient;
 use App\Services\IdentifierService;
@@ -37,7 +38,7 @@ class AiRunsController extends Controller
     public function index(Request $request): JsonResponse
     {
         $runs = AiRun::query()
-            ->with(['study.order.patient'])
+            ->with(['study.order.patient', 'user'])
             ->when($request->string('study_id')->toString(), fn ($q, $s) => $q->where('study_id', $s))
             ->when($request->string('task_id')->toString(), fn ($q, $s) => $q->where('task_id', $s))
             ->when($request->string('status')->toString(), fn ($q, $s) => $q->where('status', $s))
@@ -88,12 +89,25 @@ class AiRunsController extends Controller
 
         RunAiRun::dispatch($run);
 
+        // Audit: siapa/kapan/task/model — referensi ID saja, tanpa pixel
+        // data maupun isi DICOM (hasil penuh tinggal di ai_runs.result).
+        AuditLog::record('ai_run.created', $run, [
+            'run_id' => $run->run_id,
+            'study_id' => $run->study_id,
+            'task_id' => $run->task_id,
+            'model_id' => $run->model_id,
+            'model_version' => $run->model_version,
+            'status' => $run->status,
+        ]);
+
         return response()->json($run, 202);
     }
 
     public function show(string $runId): JsonResponse
     {
-        $run = AiRun::with(['study.order.patient'])->where('run_id', $runId)->firstOrFail();
+        $run = AiRun::with(['study.order.patient', 'user'])->where('run_id', $runId)->firstOrFail();
+
+        AuditLog::record('ai_run.viewed', $run, ['run_id' => $run->run_id]);
 
         return response()->json($run);
     }

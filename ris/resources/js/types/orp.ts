@@ -203,6 +203,7 @@ export type AiRun = {
     started_at: string | null;
     completed_at: string | null;
     created_at?: string;
+    user?: { id: number; name: string } | null;
 };
 
 export type ReportStatus =

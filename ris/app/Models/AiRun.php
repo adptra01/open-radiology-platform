@@ -68,6 +68,11 @@ class AiRun extends Model
         return $this->belongsTo(Study::class);
     }
 
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function isTerminal(): bool
     {
         return in_array($this->status, self::TERMINAL, true);
