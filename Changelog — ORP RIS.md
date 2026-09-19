@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+### Changed — Cutover entrypoint ke ai_gateway.server (2026-09-19)
+- `orp-ai serve` default kini `ai_gateway.server:app`; flag baru `--legacy` untuk rollback darurat ke `orp_ai.server:app`. Dockerfile CMD **tidak berubah** (otomatis ikut cutover); healthcheck `/health` tetap valid (gateway mengeksposnya + marker `gateway:"ai_gateway/0.2.0"`).
+- **Bukti live**: default → health ok + xrv `/infer` 5 findings; `--legacy` → health ok (tanpa marker) + `/infer/tb` True/0.5299 (bobot dummy). Sisa M11-Phase 2: hapus shim `orp_ai` + card legacy setelah masa observasi.
+
 ### Verified — Big-bang gateway terverifikasi penuh + commit (2026-09-19)
 - **Suite**: pytest **57 passed**, phpunit **135 passed** (552 assertions), `tsc --noEmit` 0 error, `npm run build` OK via ddev. Satu regresi worker-legacy tertangkap & diperbaiki sebelum commit (fallback `/infer/tb` + normalisasi payload).
 - **E2E live** `ai_gateway.server` (uvicorn, bobot dummy): capabilities 1 task available; CR→completed positive/0.53/threshold 0.5/uncalibrated; CT→failed `UNSUPPORTED_MODALITY` + pesan UI bersih; unknown task→404. Pelajaran: tunggu server >6s (import torch) sebelum curl.

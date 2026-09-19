@@ -55,7 +55,10 @@ def cmd_batch(args: argparse.Namespace) -> None:
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
-    uvicorn.run("orp_ai.server:app", host=args.host, port=args.port, reload=args.reload)
+    # Cutover M11: default ke AI Gateway (ai_gateway.server); --legacy
+    # mempertahankan server lama orp_ai.server untuk rollback darurat.
+    app = "orp_ai.server:app" if args.legacy else "ai_gateway.server:app"
+    uvicorn.run(app, host=args.host, port=args.port, reload=args.reload)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -81,10 +84,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_batch.add_argument("--format", choices=["json", "csv"], default="json")
     p_batch.set_defaults(func=cmd_batch)
 
-    p_serve = sub.add_parser("serve", help="run the FastAPI HTTP server")
+    p_serve = sub.add_parser("serve", help="run the AI Gateway HTTP server")
     p_serve.add_argument("--host", type=str, default="0.0.0.0")
     p_serve.add_argument("--port", type=int, default=8000)
     p_serve.add_argument("--reload", action="store_true")
+    p_serve.add_argument(
+        "--legacy",
+        action="store_true",
+        help="serve legacy orp_ai.server instead of ai_gateway.server (rollback)",
+    )
     p_serve.set_defaults(func=cmd_serve)
 
     return parser
