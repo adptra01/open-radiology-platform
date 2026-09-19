@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AiRun;
 use App\Models\Order;
 use App\Models\Patient;
 use App\Models\Report;
@@ -66,5 +67,19 @@ class IdentifierService
     public function nextReportNumber(): string
     {
         return 'RPT-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(4));
+    }
+
+    /**
+     * AI Run ID — human-readable untuk API/audit.
+     * Format: AIR-YYMMDD-XXXX (15 karakter, konsisten dengan ACC-/ORD-YYMMDD-XXXX,
+     * kapasitas 10.000/hari, retry bila tabrakan).
+     */
+    public function nextRunId(): string
+    {
+        do {
+            $id = 'AIR-' . now()->format('ymd') . '-' . Str::padLeft((string) random_int(0, 9999), 4, '0');
+        } while (AiRun::withTrashed()->where('run_id', $id)->exists());
+
+        return $id;
     }
 }

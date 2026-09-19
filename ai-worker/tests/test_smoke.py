@@ -73,12 +73,23 @@ def test_tb_weights_missing_degrades_gracefully(tmp_path):
     assert "weights not found" in status["note"].lower()
 
 
-def test_infer_tb_endpoint_degrades_without_weights(tmp_path):
-    """POST /infer/tb returns available=False (bukan 500) saat weights belum ada."""
+def test_infer_tb_endpoint_degrades_without_weights(tmp_path, monkeypatch):
+    """POST /infer/tb returns available=False (bukan 500) saat weights belum ada.
+    
+    Skips if dummy/real weights already present (uses separate env to isolate)."""
     import io
     import json
+    import os
 
     from fastapi import HTTPException, UploadFile
+
+    # Force weights path to non-existent file
+    monkeypatch.setenv("ORP_AI_TB_WEIGHTS", str(tmp_path / "missing_tb.pt"))
+    
+    # Need to reload server module to pick up new env
+    import importlib
+    import orp_ai.server as server_module
+    importlib.reload(server_module)
 
     from orp_ai.server import infer_tb
 

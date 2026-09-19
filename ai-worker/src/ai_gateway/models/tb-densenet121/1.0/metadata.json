@@ -1,0 +1,19 @@
+{
+  "model_id": "tb-densenet121",
+  "version": "1.0",
+  "task": "tb-screening",
+  "framework": "pytorch",
+  "architecture": "densenet121-bce-1-logit",
+  "input_type": "2D_CXR",
+  "input_size": [224, 224],
+  "modalities": ["CR", "DX"],
+  "body_regions": ["CHEST"],
+  "threshold": 0.5,
+  "calibration": {
+    "status": "uncalibrated",
+    "note": "Default 0.50 is NOT clinically validated. Phase 3 evaluation sets the calibrated threshold."
+  },
+  "dataset": "Montgomery+Shenzhen (public)",
+  "weights_file": "model.pt",
+  "disclaimer": "AI screening support only — not a diagnosis. Clinical interpretation is required."
+}

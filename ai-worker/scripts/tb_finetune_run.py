@@ -48,7 +48,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--data-dir", default="/content/data/monty_shenzhen")
     p.add_argument("--out", default="tb_densenet121.pt")
-    return p.parse_args()
+    # parse_known_args: kernel Colab menyuntikkan argv launcher-nya sendiri
+    # (mis. `-f /root/.local/share/jupyter/runtime/kernel-*.json`) ke sys.argv.
+    # Abaikan argumen tak dikenal agar skrip tetap jalan via `colab exec -f`.
+    args, _unknown = p.parse_known_args()
+    return args
 
 
 def main() -> None:

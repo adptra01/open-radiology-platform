@@ -23,15 +23,17 @@ import threading
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import torch
 from PIL import Image
 from torch import nn
 from torchvision import models, transforms
 
 from .config import Settings
+from .dicom import read_dicom_as_pil, DicomValidationError, user_reason
 
 log = logging.getLogger(__name__)
+
+# Remove unused numpy import (was used by legacy _read_as_grayscale_pil)
 
 TB_CHECKPOINT_NAME = "tb_densenet121.pt"
 
@@ -60,18 +62,14 @@ def _weights_path(settings: Settings | None = None) -> Path:
 
 
 def _read_as_grayscale_pil(img_path: str | Path) -> Image.Image:
-    """Open PNG/JPG via PIL, or DICOM via pydicom, as an 8-bit L-mode PIL image."""
+    """Open PNG/JPG via PIL, or DICOM via the M8 dicom adapter, as 8-bit L-mode PIL."""
     path = Path(img_path)
     if path.suffix.lower() == ".dcm":
-        import pydicom
-
-        ds = pydicom.dcmread(path)
-        arr = np.asarray(ds.pixel_array, dtype=np.float32)
-        if ds.PhotometricInterpretation == "MONOCHROME1":  # invert (white=bone)
-            arr = arr.max() - arr
-        lo, hi = np.percentile(arr, (1, 99))  # simple windowing like the datasets
-        arr = np.clip((arr - lo) / max(hi - lo, 1e-6), 0, 1) * 255.0
-        return Image.fromarray(arr.astype(np.uint8), mode="L")
+        try:
+            return read_dicom_as_pil(path)
+        except DicomValidationError as e:
+            log.warning("DICOM validation failed for %s: %s", path, e)
+            raise
     return Image.open(path).convert("L")
 
 
@@ -130,7 +128,9 @@ def predict_tb(img_path: str | Path, settings: Settings | None = None) -> dict[s
 
     Result always contains ``available`` so callers can branch safely:
         * available=True  -> ``probability`` = P(TB) in [0,1], ``logit`` raw
-        * available=False -> explanation in ``note``, no probability
+        * available=False -> ``reason_code`` (machine-readable, stable) +
+          ``reason`` (user-facing, safe for the RIS UI) + ``note`` (technical,
+          audit details only). No probability.
     """
     settings = settings or Settings.from_env()
     loaded = load_tb_model(settings)
@@ -138,10 +138,13 @@ def predict_tb(img_path: str | Path, settings: Settings | None = None) -> dict[s
         return {
             "available": False,
             "probability": None,
+            "reason_code": "weights_missing",
+            "reason": "TB screening is not available — model weights are not installed.",
             "note": (
-                f"TB weights not found ({DEFAULT_WEIGHTS_PATH}) — run the Colab "
-                "fine-tune notebook (ai-worker/notebooks/tb_finetune_colab.ipynb) "
-                "and place tb_densenet121.pt in ai-worker/weights/."
+                f"TB weights not found ({DEFAULT_WEIGHTS_PATH}) — fine-tune training "
+                "is currently skipped (Colab unavailable). When a GPU is available, "
+                "use ai-worker/notebooks/tb_finetune_kaggle.ipynb (needs Internet ON) "
+                "or tb_finetune_colab.ipynb, and place tb_densenet121.pt in ai-worker/weights/."
             ),
         }
     model, meta = loaded
@@ -150,9 +153,24 @@ def predict_tb(img_path: str | Path, settings: Settings | None = None) -> dict[s
         tensor = _TB_TRANSFORM(pil_img).unsqueeze(0).to(settings.device)
         with torch.no_grad():
             logit = model(tensor).squeeze(1).item()
+    except DicomValidationError as exc:
+        log.warning("TB inference skipped (AI NOT RUN) for %s: [%s] %s", img_path, exc.code, exc)
+        return {
+            "available": False,
+            "probability": None,
+            "reason_code": exc.code,
+            "reason": user_reason(exc.code),
+            "note": f"AI NOT RUN — DICOM validation failed: {exc}",
+        }
     except Exception as exc:  # noqa: BLE001
         log.exception("TB inference failed for %s", img_path)
-        return {"available": False, "probability": None, "note": f"inference error: {exc}"}
+        return {
+            "available": False,
+            "probability": None,
+            "reason_code": "inference_error",
+            "reason": "TB screening could not process this image.",
+            "note": f"inference error: {exc}",
+        }
 
     return {
         "available": True,

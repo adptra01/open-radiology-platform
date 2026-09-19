@@ -1,0 +1,25 @@
+{
+  "dicom": {
+    "modalities": ["CR", "DX"],
+    "photometric": ["MONOCHROME1", "MONOCHROME2", "YBR_FULL_422"],
+    "bits_stored": [8, 10, 12, 14, 16],
+    "steps": [
+      "pixel_representation_signed_to_unsigned",
+      "ybr_full_422_to_luminance",
+      "rescale_slope_intercept",
+      "monochrome1_inversion",
+      "voi_lut_window_preferred_else_percentile_1_99",
+      "map_to_8bit"
+    ]
+  },
+  "model_input": {
+    "grayscale_channels": 3,
+    "resize": [224, 224],
+    "to_tensor": true,
+    "normalize": {
+      "mean": [0.485, 0.456, 0.406],
+      "std": [0.229, 0.224, 0.225]
+    }
+  },
+  "note": "Must mirror the fine-tune training transform exactly (notebook cell 5). No CenterCrop. Changing this invalidates the model — bump the model version."
+}

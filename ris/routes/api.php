@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AiResultsController;
+use App\Http\Controllers\Api\AiRunsController;
 use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\HealthController;
@@ -200,9 +201,17 @@ Route::prefix('transmissions')->middleware($spa)->group(function () {
     Route::post('{transmission}/retry', [TransmissionController::class, 'retry']);
 });
 
-// Hasil inferensi AI (M6).
+// Hasil inferensi AI (M6, legacy compatibility).
 Route::prefix('ai-results')->middleware($spa)->group(function () {
     Route::get('/', [AiResultsController::class, 'index']);
     Route::get('{aiResult}', [AiResultsController::class, 'show']);
     Route::post('run/{study}', [AiResultsController::class, 'run']);
+});
+
+// AI Gateway generik (keputusan arsitektur final M10+): canonical ai_runs.
+Route::prefix('ai')->middleware($spa)->group(function () {
+    Route::get('capabilities', [AiRunsController::class, 'capabilities']);
+    Route::get('runs', [AiRunsController::class, 'index']);
+    Route::post('runs', [AiRunsController::class, 'store']);
+    Route::get('runs/{runId}', [AiRunsController::class, 'show']);
 });

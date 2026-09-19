@@ -148,14 +148,60 @@ export type Study = {
 export type AiResult = {
     id: number;
     study_id: number;
+    order_id: number | null;
     status: string;
-    source: string | null;
-    model: string | null;
-    threshold: number | null;
-    inference_ms: number | null;
+    model_name: string | null;
+    pathologies: Record<string, number> | null;
     findings: { name: string; probability: number }[] | null;
-    tb: Record<string, unknown> | null;
+    /** JSON response utuh dari ai-worker; payload TB di `raw_report.tb`. LEGACY. */
+    raw_report: Record<string, unknown> | null;
     error: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    inference_ms: number | null;
+    created_at?: string;
+};
+
+/** Kapabilitas task generik dari AI Gateway (GET /api/ai/capabilities). */
+export type AiCapability = {
+    task_id: string;
+    name: string;
+    modalities: string[];
+    body_regions: string[];
+    input_type: string;
+    model?: { id: string; version: string } | null;
+    available: boolean;
+    note?: string | null;
+};
+
+export type AiRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+/** Canonical AI run record (GET /api/ai/runs). */
+export type AiRun = {
+    id: number;
+    run_id: string;
+    study_id: number;
+    series_id: string | null;
+    task_id: string;
+    model_id: string | null;
+    model_version: string | null;
+    threshold: number | null;
+    status: AiRunStatus;
+    input_reference: Record<string, unknown> | null;
+    result: {
+        type: string;
+        classification?: {
+            label: string;
+            score: number;
+            threshold: number;
+        } | null;
+        calibration?: { status: string } | null;
+    } | null;
+    metadata: Record<string, unknown> | null;
+    error_code: string | null;
+    error_message: string | null;
+    started_at: string | null;
+    completed_at: string | null;
     created_at?: string;
 };
 

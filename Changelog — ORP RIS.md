@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+### Verified — Big-bang gateway terverifikasi penuh + commit (2026-09-19)
+- **Suite**: pytest **57 passed**, phpunit **135 passed** (552 assertions), `tsc --noEmit` 0 error, `npm run build` OK via ddev. Satu regresi worker-legacy tertangkap & diperbaiki sebelum commit (fallback `/infer/tb` + normalisasi payload).
+- **E2E live** `ai_gateway.server` (uvicorn, bobot dummy): capabilities 1 task available; CR→completed positive/0.53/threshold 0.5/uncalibrated; CT→failed `UNSUPPORTED_MODALITY` + pesan UI bersih; unknown task→404. Pelajaran: tunggu server >6s (import torch) sebelum curl.
+- **Commit**: fondasi M10 (paket `ai_gateway/`, `ai_runs`, panel) siap push ke `main`.
+
+### Added — Big-bang AI Gateway foundation: ai_gateway/ + ai_runs + AI Assistance (2026-09-19)
+- **Keputusan arsitektur final terkunci**: framework generik, implementasi nyata hanya TB; `ai_runs` canonical, `ai_results`/`raw_report['tb']` legacy; threshold 0.50 + `calibration.status:"uncalibrated"`; trigger manual; Python stateless tanpa DB.
+- **Python `ai-worker/src/ai_gateway/`** (paket baru, `orp_ai/` utuh sampai cutover): `api/{health,capabilities,runs}`, `core/{registry,dispatcher,envelope,models,exceptions}`, `dicom/{reader,validator,preprocessing}`, `tasks/tb/{adapter,preprocessing,model,inference}`, `models/tb-densenet121/1.0/{metadata.json,preprocessing.json}`. Envelope terkunci: classification{label,score,threshold}+calibration / failed{error{code,message}} + disclaimer ID+EN. `POST /infer/{task}` generik, `/infer/tb` alias, unknown→404.
+- **Laravel**: migrasi `ai_runs` (run_id `AIR-YYMMDD-XXXX` 15-char + index study/series/task/status/created) + model `AiRun` + `IdentifierService::nextRunId()`; `AiRunsController` (`GET /api/ai/capabilities`, `POST /api/ai/runs`→202, show/index); `AiClient::inferTask()/capabilities()` + fallback legacy `/infer/tb` (worker lama) + normalisasi envelope; Job `RunAiRun` (idempotent, dual-write legacy). `POST /infer/tb` tetap kompatibel.
+- **React**: `AiAssistancePanel` capability-driven (Run per task, polling aktif, renderer classification + calibration badge, failed + technical-details toggle, riwayat runs, disclaimer, seksi legacy) mounted di orders/show di atas `AiTbCard` (fallback, tidak diubah). `tsc` bersih, `npm run build` 9.72s via ddev.
+- **Bukti**: pytest **57 passed** (26 dicom + 7 smoke + 11 gateway lama + 13 paket baru); phpunit **135 passed** (127+8); E2E live `ai_gateway.server`: CR→completed positive/0.5299, CT→failed `UNSUPPORTED_MODALITY`, unknown→404. Regresi legacy worker (`/infer/tb` tanpa envelope) diperbaiki via fallback + normalisasi.
+
+### Added — M10 AI Gateway: task registry + structured AI-NOT-RUN (2026-09-19)
+- **`POST /infer/{task}` generik** (`ai-worker/src/orp_ai/server.py`): dispatch via `adapters.run_task()`; task tak dikenal → 404 bersih (lihat `GET /capabilities` dulu), bukan 500. `/infer/tb` kini **alias via registry** (`run_task("tb-screening")`) — TB benar-benar plugin, bukan core server.
+- **Reason code terstruktur** (`dicom.DicomValidationError.code` + `USER_REASONS`): `unsupported_modality/photometric/bits`, `inconsistent_bits`, `unsupported_planar`, `missing_pixel_data`, `unreadable_dicom`, `weights_missing`, `inference_error`. Respons `available=False` membawa `reason_code` + `reason` (UI) + `note` (audit). `validate_dicom_only()` ikut mengembalikan ketiganya.
+- **Test**: `tests/test_gateway.py` 11 test (registry shape, dispatch generik, 404, alias, reason codes, stabilitas surface). Suite penuh **44 passed** (26 dicom + 7 smoke + 11 gateway), tanpa regresi.
+- **Dok**: `ai-worker/docs/M10-gateway-task-registry.md` (kontrak endpoint + reason codes + cara tambah task baru). Colab tetap dilewati; OHIF v2 final.
+
+### Changed — M9 ditutup: OHIF v2 tetap + image orp-ris:latest (2026-09-19)
+- **Keputusan OHIF FINAL (user, 2026-09-19)**: pakai lini v2 (`ohif/viewer` + `servers.dicomWeb` array, proxy Basic-auth terverifikasi jalan) — **BUKAN v3**. `docs/ohif-v3-evaluation.md` dinyatakan arsip referensi; tidak ada rencana migrasi ke `ohif/app` (v3, schema `dataSources`).
+- **Colab DILEWATI untuk saat ini** (user, 2026-09-19): free-tier `Service Unavailable`; training bobot TB real ditunda tanpa batas waktu. Fallback Kaggle (`ai-worker/notebooks/tb_finetune_kaggle.ipynb`, butuh `Internet: ON` manual di browser) tetap tersedia saat dibutuhkan.
+- **Sisa M9 tertutup**: `data/` = 0 tracked (ter-ignore root `.gitignore`, `git rm --cached` tidak perlu); isu ORD-vs-SH tertutup (`ORD-YYMMDD-XXXX` 15 char, aman VR SH ≤16).
+- **Build produksi**: `docker compose -f docker-compose.prod.yml build ris` → `orp-ris:latest` **1.4GB** sukses (exit 0, export+unpack ok). Konteks aman berkat `.dockerignore` root (`data/` 315M + `weights/*.pt` + vendor/node_modules dikecualikan). Development & verifikasi tetap lewat **ddev** (`ris/.ddev`, stack sehat: PHP 8.3 + Postgres 16, migrasi 0 pending).
+- **Ditunda tanpa batas waktu**: bobot TB real (Colab dilewati; Kaggle fallback tersedia; dummy `tb_densenet121.pt` tetap untuk loop verifikasi M8).
+
+### Updated — Sesi Colab training TB DenseNet121 + poller background (2026-09-19)
+- **Session `tb-train8`** (T4 GPU, variant GPU, free-tier) dijalankan via Colab CLI 0.6.0 dengan shim `sitecustomize.py` (koreksi `KernelClient` → `JupyterKernelClient`) + sintaks benar: `colab exec -s tb-train8 --timeout 3600 -f ai-worker/scripts/tb_finetune_run.py`. Training fine-tune DenseNet121 (Montgomery+Shenzhen, dataset publik) berjalan di `/content`, artifact disimpan sebagai `tb_densenet121.pt` (cwd `/content`).
+- **Poller background terpisah** (`ai-worker/scripts/tb_poll_download.sh`, via `nohup` PID 205191): polling `colab ls -s tb-train8 /content/tb_densenet121.pt` tiap 30s × 40 iterasi; begitu file terdeteksi → `colab download` bermultiple attempt (retry 5×8s) → backup ganda `.bak1`+`.bak2` → `sha256sum` → exit code bersih (0=sukses, 2=download gagal, 3=polling habis).
+- **Koreksi sintaks Colab CLI yang benar (temuan penting)**: `colab exec` **tidak punya opsi `--keep`** (hanya `-s/--session`, `-f/--file`, `--timeout`, `--output-image`); `colab ls`/`colab download` menerima **path sebagai argumen POSITIONAL**, bukan flag `-p`. Poller lama gagal karena memakai `-p` yang tidak ada → harus `colab ls -s <session> <path>`.
+- **Nama bobot konsisten**: trainer `tb_finetune_run.py` default `--out tb_densenet121.pt`; poller memakai path yang sama (`/content/tb_densenet121.pt`) → deteksi akurat, tanpa false-positive grep.
+- **Catatan**: Colab free tier **auto-stop** begitu training selesai (kernel di-recycle) → file `/content/...` hilang jika tidak sempat download. Strategy saat itu: picu `colab exec` dengan `--timeout 3600` (batas bash tool tidak perlu menunggu lama; kernel tetap hidup, training jalan), lalu jalankan **poller di mesin lokal** (bukan menunggu output bash yang timeout) supaya download/backup tetap terjadi walau tool bash dikanal timeout.
+- `ai-worker/scripts/tb_secure_artifact.sh`: verifikasi artifact setelah download — checksum SHA-256 + backup ganda + load-test `torch.load` (bobot ~35MB; bukan data pasien, patuh UU PDP).
+
 ### Fixed — image ris tidak serve HTTP + supervisord permission (2026-09-18, temuan deploy mini_pacs)
 - **nginx + php-fpm tidak pernah jalan**: `supervisord.conf` hanya berisi queue/scheduler/monitor. Ditambah `[program:nginx]` + `[program:php-fpm]`; upstream nginx → `127.0.0.1:9000` (default pool www.conf; hindari unix socket yang butuh root).
 - **Permission**: supervisord pidfile `/var/run/…` → `/tmp/`; nginx pid → `/tmp/nginx.pid`; temp dirs (`client_body`, `proxy`, `fastcgi`, …) → `/tmp/*` (prefix Alpine `/var/lib/nginx` milik root); Dockerfile `chown www-data` untuk `/var/log/supervisor` + `/var/log/nginx`.

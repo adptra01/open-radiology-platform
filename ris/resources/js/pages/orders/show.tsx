@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AiTbCard } from '@/components/orp/ai-tb-card';
+import { AiAssistancePanel } from '@/components/orp/ai-assistance-panel';
 import { ConfirmButton } from '@/components/orp/confirm-button';
 import { NoAccess, PageHeader } from '@/components/orp/page-header';
 import { usePermissions } from '@/hooks/use-permissions';
@@ -251,6 +253,12 @@ export default function OrderDetail() {
                                                 {' · '}
                                                 {study.study_date ?? '—'}
                                             </div>
+                                        </div>
+                                        <div className="flex w-full items-center gap-2">
+                                            <AiAssistancePanel study={study} onRun={() => void load()} />
+                                        </div>
+                                        <div className="flex w-full items-center gap-2">
+                                            <AiTbCard study={study} onRun={() => void load()} />
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <Badge

@@ -1,6 +1,9 @@
-# OHIF v3 Evaluation — Catatan Migrasi dari v2 (ohif/viewer) ke v3 (ohif/app)
+# OHIF v3 Evaluation — ARSIP (Keputusan final: tetap v2)
 
-> Status: **Evaluasi** — belum diimplementasikan. v2 (`ohif/viewer:latest`) masih dipakai di produksi saat ini.
+> **KEPUTUSAN FINAL (user, 2026-09-19): pakai OHIF v2 (`ohif/viewer:latest`), BUKAN v3.**
+> Dokumen ini dipertahankan murni sebagai **arsip referensi** — tidak ada rencana migrasi
+> ke `ohif/app` (v3). Alasan: v2 terverifikasi jalan via proxy Basic-auth; migrasi v3
+> (image + schema `dataSources` + auth) berisiko regresi viewer tanpa kebutuhan yang memaksa.
 
 ---
 
